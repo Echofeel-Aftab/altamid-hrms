@@ -1,0 +1,1139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id              String    @id @default(cuid())
+  name            String
+  legalName       String
+  slug            String    @unique
+  state           String
+  city            String    @default("")
+  timezone        String    @default("Asia/Kolkata")
+  panEnc          String    @default("")
+  instanceId      String    @unique
+  planCode        String    @default("essentials")
+  licenseKeyEnc   String    @default("")
+  bindingHost     String    @default("localhost")
+  leaseJson       String    @default("")
+  leaseCheckedAt  DateTime?
+  brandJson       String    @default("")
+  settingsJson    String    @default("")
+  hireViaAgencies Boolean   @default(false)
+  supplyManpower  Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  users              User[]
+  departments        Department[]
+  roles              CompanyRole[]
+  levels             JobLevel[]
+  teams              Team[]
+  vendors            Vendor[]
+  assets             Asset[]
+  tasks              OnboardingTask[]
+  exits              ExitRequest[]
+  detailChanges      DetailChange[]
+  designations       Designation[]
+  locations          Location[]
+  employees          Employee[]
+  announcements      Announcement[]
+  leaveTypes         LeaveType[]
+  leaveRequests      LeaveRequest[]
+  punches            Punch[]
+  attendanceDevices  AttendanceDevice[]
+  holidays           Holiday[]
+  attendanceRequests AttendanceRequest[]
+  audits             AuditEvent[]
+  libraryDocs        LibraryDoc[]
+  homeWidgets        HomeWidget[]
+  jobForms           JobForm[]
+  jobApplications    JobApplication[]
+  openings           Opening[]
+  hiringDesk         HiringDesk?
+  notifications      Notification[]
+  payStructures      PayStructure[]
+  appraisals         Appraisal[]
+  paySlips           PaySlip[]
+  payLayout          PayLayout?
+  taxForms           TaxForm[]
+  recognitions       Recognition[]
+  accessGrants       AccessGrant[]
+  payMonths          PayMonth[]
+  automationLogs     AutomationLog[]
+  outlets            Outlet[]
+  moduleConfigs      ModuleConfig[]
+  taxDeclarations    TaxDeclaration[]
+  taxProofs          TaxProof[]
+  reviewCycles       ReviewCycle[]
+  goals              Goal[]
+  reviews            PerformanceReview[]
+  surveys            Survey[]
+  surveyAnswers      SurveyAnswer[]
+  flexChoices        FlexChoice[]
+  successionPlans    SuccessionPlan[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String
+  active       Boolean   @default(true)
+  failedCount  Int       @default(0)
+  lockedUntil  DateTime?
+  badgeSeenAt  DateTime?
+  employeeId   String?   @unique
+  master       Boolean   @default(false)
+  pinsJson     String    @default("[]")
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+
+  @@index([companyId])
+}
+
+model Department {
+  id            String         @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  employees     Employee[]
+  announcements Announcement[]
+
+  @@unique([companyId, outletId, name])
+  @@index([outletId])
+}
+
+model CompanyRole {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
+  name      String
+  rank      Int
+  scope     String  @default("company")
+
+  @@unique([companyId, key])
+}
+
+model JobLevel {
+  id        String     @id @default(cuid())
+  companyId String
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  rank      Int        @default(1)
+  employees Employee[]
+
+  @@unique([companyId, name])
+}
+
+model Team {
+  id           String     @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  departmentId String     @default("")
+  leadId       String     @default("")
+  employees    Employee[]
+
+  @@unique([companyId, outletId, name])
+  @@index([companyId])
+  @@index([outletId])
+}
+
+model Designation {
+  id        String     @id @default(cuid())
+  companyId String
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  employees Employee[]
+
+  @@unique([companyId, name])
+}
+
+model Location {
+  id            String         @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  state         String         @default("")
+  city          String         @default("")
+  lat           Float?
+  lng           Float?
+  radius        Int            @default(200)
+  employees     Employee[]
+  announcements Announcement[]
+
+  @@unique([companyId, outletId, name])
+  @@index([outletId])
+}
+
+model Employee {
+  id                String           @id @default(cuid())
+  companyId         String
+  outletId          String?
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code              String
+  firstName         String
+  lastName          String
+  email             String           @default("")
+  phone             String           @default("")
+  workerType        String           @default("employee")
+  status            String           @default("active")
+  departmentId      String?
+  department        Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designationId     String?
+  designation       Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  locationId        String?
+  location          Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  managerId         String?
+  manager           Employee?        @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
+  levelId           String?
+  level             JobLevel?        @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  teamId            String?
+  team              Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  agencyId          String?
+  agency            Vendor?          @relation("SuppliedBy", fields: [agencyId], references: [id], onDelete: SetNull)
+  clientId          String?
+  client            Vendor?          @relation("DeployedTo", fields: [clientId], references: [id], onDelete: SetNull)
+  reports           Employee[]       @relation("Reports")
+  assets            Asset[]
+  tasks             OnboardingTask[]
+  exits             ExitRequest[]
+  costCentre        String           @default("")
+  dateOfJoining     String
+  dateOfExit        String           @default("")
+  confirmedOn       String           @default("")
+  probationEndsOn   String           @default("")
+  gender            String           @default("")
+  dateOfBirth       String           @default("")
+  maritalStatus     String           @default("")
+  nationality       String           @default("")
+  bloodGroup        String           @default("")
+  emergencyName     String           @default("")
+  emergencyPhone    String           @default("")
+  address           String           @default("")
+  panEnc            String           @default("")
+  bankEnc           String           @default("")
+  ifscEnc           String           @default("")
+  bankName          String           @default("")
+  personalEmail     String           @default("")
+  fatherName        String           @default("")
+  spouseName        String           @default("")
+  emergencyRelation String           @default("")
+  city              String           @default("")
+  state             String           @default("")
+  pincode           String           @default("")
+  permanentAddress  String           @default("")
+  nomineeName       String           @default("")
+  nomineeRelation   String           @default("")
+  uan               String           @default("")
+  esicNo            String           @default("")
+  aadhaarEnc        String           @default("")
+  taxRegime         String           @default("")
+  photoAt           DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  user              User?
+  detailChanges     DetailChange[]
+
+  leaveRequests      LeaveRequest[]
+  punches            Punch[]
+  attendanceRequests AttendanceRequest[]
+  appraisals         Appraisal[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([outletId])
+}
+
+model Asset {
+  id            String       @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  tag           String
+  kind          String       @default("laptop")
+  employeeId    String?
+  employee      Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  issuedOn      String       @default("")
+  returnedOn    String       @default("")
+  note          String       @default("")
+  brand         String       @default("")
+  model         String       @default("")
+  serialNo      String       @default("")
+  specs         String       @default("")
+  condition     String       @default("good")
+  status        String       @default("stock")
+  purchasedOn   String       @default("")
+  costPaise     Int          @default(0)
+  vendor        String       @default("")
+  invoiceNo     String       @default("")
+  warrantyUntil String       @default("")
+  locationId    String       @default("")
+  detailsJson   String       @default("{}")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  events        AssetEvent[]
+
+  @@unique([companyId, tag])
+  @@index([companyId])
+  @@index([outletId])
+}
+
+model AssetEvent {
+  id        String   @id @default(cuid())
+  companyId String
+  outletId  String?
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  kind      String
+  day       String
+  detail    String   @default("")
+  actorName String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([outletId])
+}
+
+model OnboardingTask {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title      String
+  done       Boolean  @default(false)
+
+  @@index([employeeId])
+  @@index([outletId])
+}
+
+model DetailChange {
+  id         String    @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fields     String
+  payloadEnc String
+  status     String    @default("pending")
+  note       String    @default("")
+  decidedBy  String    @default("")
+  decidedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([companyId, status])
+  @@index([employeeId, createdAt])
+  @@index([outletId])
+}
+
+model ExitRequest {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  lastDay    String
+  reason     String
+  status     String   @default("pending")
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+  /// self, or hr when HR started the exit for the person
+  initiatedBy     String    @default("self")
+  originalLastDay String    @default("")
+  noticeWaived    Boolean   @default(false)
+  overrideNote    String    @default("")
+  decidedBy       String    @default("")
+  /// The approval steps and their history, fixed when the resignation is sent. Empty on older requests.
+  flowJson        String    @default("")
+  checklistJson   String    @default("[]")
+  interviewJson   String    @default("")
+  settlementJson  String    @default("")
+  settledAt       DateTime?
+  closedAt        DateTime?
+
+  @@index([companyId, status])
+  @@index([outletId])
+}
+
+model Announcement {
+  id           String      @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title        String
+  body         String
+  pinned       Boolean     @default(false)
+  audience     String      @default("all")
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  locationId   String?
+  location     Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  authorId     String
+  authorName   String
+  expiresOn    String      @default("")
+  createdAt    DateTime    @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([outletId])
+}
+
+model LeaveType {
+  id              String         @id @default(cuid())
+  companyId       String
+  outletId        String?
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  paid            Boolean        @default(true)
+  daysPerYear     Int            @default(0)
+  active          Boolean        @default(true)
+  carryForwardMax Int            @default(0)
+  maxInRow        Int            @default(0)
+  noticeDays      Int            @default(0)
+  afterProbation  Boolean        @default(false)
+  compOff         Boolean        @default(false)
+  requests        LeaveRequest[]
+
+  @@unique([companyId, outletId, code])
+  @@index([outletId])
+}
+
+model LeaveRequest {
+  id          String    @id @default(cuid())
+  companyId   String
+  outletId    String?
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  startsOn    String
+  endsOn      String
+  days        Int
+  portion     String    @default("full")
+  reason      String    @default("")
+  status      String
+  reviewerId  String    @default("")
+  reviewNote  String    @default("")
+  /// The approval steps and their history, fixed when the request is raised. Empty on older requests.
+  flowJson    String    @default("")
+  createdAt   DateTime  @default(now())
+  decidedAt   DateTime?
+
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@index([outletId])
+}
+
+model Punch {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind       String
+  source     String   @default("web")
+  deviceId   String   @default("")
+  note       String   @default("")
+  lat        Float?
+  lng        Float?
+  accuracy   Int?
+  place      String   @default("")
+  zone       String   @default("")
+  punchedAt  DateTime @default(now())
+
+  @@index([companyId, punchedAt])
+  @@index([employeeId, punchedAt])
+  @@index([outletId])
+}
+
+model AttendanceDevice {
+  id         String    @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  kind       String
+  location   String    @default("")
+  token      String    @unique
+  active     Boolean   @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([companyId])
+  @@index([outletId])
+}
+
+model JobForm {
+  id           String           @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String           @unique
+  title        String
+  intro        String           @default("")
+  submitLabel  String           @default("Submit application")
+  thanks       String           @default("Thank you. We have your application.")
+  status       String           @default("draft")
+  fieldsJson   String           @default("[]")
+  settingsJson String           @default("{}")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  applications JobApplication[]
+
+  @@index([companyId, updatedAt])
+  @@index([outletId])
+}
+
+model HiringDesk {
+  companyId   String  @id
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  feedToken   String  @unique
+  portalsJson String  @default("{}")
+}
+
+model Vendor {
+  id          String     @id @default(cuid())
+  companyId   String
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  city        String     @default("")
+  contactName String     @default("")
+  email       String     @default("")
+  phone       String     @default("")
+  note        String     @default("")
+  hireThrough Boolean    @default(false)
+  suppliesUs  Boolean    @default(false)
+  weSupply    Boolean    @default(false)
+  active      Boolean    @default(true)
+  supplied    Employee[] @relation("SuppliedBy")
+  deployed    Employee[] @relation("DeployedTo")
+  openings    Opening[]
+  createdAt   DateTime   @default(now())
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model Opening {
+  id           String           @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code         String
+  title        String
+  department   String           @default("")
+  location     String           @default("")
+  workplace    String           @default("office")
+  employment   String           @default("full-time")
+  seats        Int              @default(1)
+  description  String           @default("")
+  requirements String           @default("")
+  salaryNote   String           @default("")
+  internal     Boolean          @default(false)
+  referral     Boolean          @default(false)
+  status       String           @default("draft")
+  agencyId     String?
+  agency       Vendor?          @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  portalsJson  String           @default("[]")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  applications JobApplication[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([outletId])
+}
+
+model JobApplication {
+  id           String             @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  formId       String?
+  form         JobForm?           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  openingId    String?
+  opening      Opening?           @relation(fields: [openingId], references: [id], onDelete: SetNull)
+  name         String
+  email        String
+  phone        String             @default("")
+  city         String             @default("")
+  resumeUrl    String             @default("")
+  source       String             @default("form")
+  referrerId   String             @default("")
+  status       String             @default("new")
+  note         String             @default("")
+  jobTitle     String             @default("")
+  jobCode      String             @default("")
+  answersJson  String             @default("{}")
+  filesJson    String             @default("[]")
+  trackingJson String             @default("{}")
+  resumeText   String             @default("")
+  coolingUntil String             @default("")
+  coolingNote  String             @default("")
+  decidedAt    DateTime?
+  createdAt    DateTime           @default(now())
+  events       ApplicationEvent[]
+
+  @@index([formId, createdAt])
+  @@index([openingId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([companyId, status])
+  @@index([companyId, email])
+  @@index([outletId])
+}
+
+model ApplicationEvent {
+  id            String         @id @default(cuid())
+  companyId     String
+  outletId      String?
+  applicationId String
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  kind          String
+  detail        String         @default("")
+  by            String         @default("")
+  createdAt     DateTime       @default(now())
+
+  @@index([applicationId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([outletId])
+}
+
+model Holiday {
+  id        String  @id @default(cuid())
+  companyId String
+  outletId  String?
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  day       String
+  name      String
+
+  @@unique([companyId, outletId, day])
+  @@index([companyId, day])
+  @@index([outletId])
+}
+
+model AttendanceRequest {
+  id         String    @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind       String
+  day        String
+  inTime     String    @default("")
+  outTime    String    @default("")
+  endsOn     String    @default("")
+  hours      String    @default("")
+  place      String    @default("")
+  reason     String    @default("")
+  status     String
+  reviewerId String    @default("")
+  reviewNote String    @default("")
+  /// The approval steps and their history, fixed when the request is raised. Empty on older requests.
+  flowJson   String    @default("")
+  decidedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([companyId, status])
+  @@index([employeeId, day])
+  @@index([outletId])
+}
+
+model LibraryDoc {
+  id           String   @id @default(cuid())
+  companyId    String
+  outletId     String?
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kind         String
+  title        String
+  body         String   @default("")
+  version      String   @default("1")
+  fileName     String   @default("")
+  published    Boolean  @default(true)
+  audience     String   @default("all")
+  departmentId String   @default("")
+  locationId   String   @default("")
+  employeeId   String   @default("")
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, kind])
+  @@index([outletId])
+}
+
+model HomeLayout {
+  id          String   @id @default(cuid())
+  companyId   String
+  subjectKind String
+  subjectId   String   @default("")
+  blocksJson  String   @default("{}")
+  updatedBy   String   @default("")
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, subjectKind, subjectId])
+}
+
+model HomeWidget {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
+  audience  String  @default("all")
+
+  @@unique([companyId, key])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      String
+  title     String
+  body      String    @default("")
+  link      String    @default("")
+  ref       String    @default("")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, kind, ref])
+  @@index([userId, createdAt])
+}
+
+/** One appraisal year: the grade and the annual CTC breakup published by the team lead or HR. */
+model Appraisal {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  year         Int
+  grade        String
+  rating       Int
+  designation  String   @default("")
+  note         String   @default("")
+  linesJson    String   @default("[]")
+  published    Boolean  @default(false)
+  publishedBy  String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([companyId, employeeId, year])
+  @@index([companyId, employeeId])
+}
+
+model PayStructure {
+  id            String   @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId    String
+  effectiveFrom String
+  published     Boolean  @default(false)
+  linesJson     String   @default("[]")
+  createdAt     DateTime @default(now())
+
+  @@index([companyId, employeeId])
+  @@index([outletId])
+}
+
+model PayLayout {
+  id              String  @id @default(cuid())
+  companyId       String  @unique
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  showCode        Boolean @default(true)
+  showDesignation Boolean @default(true)
+  showDepartment  Boolean @default(true)
+  showLocation    Boolean @default(false)
+  showJoined      Boolean @default(true)
+  showPaidDays    Boolean @default(true)
+  showLopDays     Boolean @default(false)
+  showPan         Boolean @default(false)
+  showBank        Boolean @default(false)
+  showEmployer    Boolean @default(false)
+  showNote        Boolean @default(true)
+}
+
+model PaySlip {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  month      String
+  published  Boolean  @default(false)
+  note       String   @default("")
+  paidDays   String   @default("")
+  lopDays    String   @default("")
+  linesJson  String   @default("[]")
+  createdAt  DateTime @default(now())
+
+  @@unique([companyId, employeeId, month])
+  @@index([outletId])
+}
+
+model PayMonth {
+  id        String   @id @default(cuid())
+  companyId String
+  outletId  String?
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  month     String
+  lockedAt  DateTime @default(now())
+  lockedBy  String   @default("")
+
+  @@unique([companyId, outletId, month])
+  @@index([outletId])
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AutomationLog {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job       String
+  ref       String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, job, ref])
+  @@index([companyId, createdAt])
+}
+
+model TaxForm {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId String
+  year       String
+  fileName   String   @default("")
+  published  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([companyId, employeeId, year])
+  @@index([outletId])
+}
+
+model Recognition {
+  id        String   @id @default(cuid())
+  companyId String
+  outletId  String?
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fromId    String
+  toId      String
+  badge     String
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([outletId])
+}
+
+model AccessGrant {
+  id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  feature     String
+  subjectKind String
+  subjectId   String
+
+  @@unique([companyId, feature, subjectKind, subjectId])
+  @@index([companyId])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  companyId String
+  outletId  String?
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorId   String
+  action    String
+  entity    String
+  entityId  String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([outletId])
+}
+
+/**
+ * A branch of the company, such as Delhi Office. Opened by one HRMS subscription.
+ */
+model Outlet {
+  id             String       @id @default(cuid())
+  companyId      String
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String
+  code           String       @default("")
+  country        String       @default("IN")
+  state          String       @default("")
+  city           String       @default("")
+  timezone       String       @default("Asia/Kolkata")
+  currency       String       @default("INR")
+  status         String       @default("active")
+  subscriptionId String       @default("")
+  settingsJson   String       @default("")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  members        UserOutlet[]
+
+  @@unique([companyId, name])
+  @@index([companyId, status])
+}
+
+/**
+ * A sign-in that works in an outlet. Role is the role there; empty means the sign-in's own role.
+ */
+model UserOutlet {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  outletId  String
+  outlet    Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  role      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@unique([userId, outletId])
+  @@index([companyId])
+}
+
+/// Settings for one module, such as the tax declaration window or flexible pay components.
+model ModuleConfig {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
+  json      String   @default("{}")
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, key])
+}
+
+/// One person's tax-saving investment declaration for a financial year, such as 2026-27.
+model TaxDeclaration {
+  id          String    @id @default(cuid())
+  companyId   String
+  outletId    String?
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId  String
+  year        String
+  regime      String    @default("new")
+  itemsJson   String    @default("{}")
+  rentJson    String    @default("[]")
+  /// draft, submitted, verified or returned
+  status      String    @default("draft")
+  note        String    @default("")
+  submittedAt DateTime?
+  verifiedAt  DateTime?
+  verifiedBy  String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([companyId, employeeId, year])
+  @@index([companyId, year, status])
+  @@index([outletId])
+}
+
+model TaxProof {
+  id            String   @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId    String
+  declarationId String
+  item          String
+  fileName      String
+  mime          String
+  size          Int      @default(0)
+  /// pending, accepted or rejected
+  status        String   @default("pending")
+  note          String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@index([declarationId])
+  @@index([outletId])
+}
+
+model ReviewCycle {
+  id         String   @id @default(cuid())
+  companyId  String
+  outletId   String?
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  startDay   String
+  endDay     String
+  /// goals, review or closed
+  phase      String   @default("goals")
+  scale      Int      @default(5)
+  selfReview Boolean  @default(true)
+  createdBy  String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([outletId])
+}
+
+model Goal {
+  id            String   @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cycleId       String
+  employeeId    String
+  title         String
+  detail        String   @default("")
+  weight        Int      @default(0)
+  target        String   @default("")
+  progress      Int      @default(0)
+  selfRating    Int      @default(0)
+  selfNote      String   @default("")
+  managerRating Int      @default(0)
+  managerNote   String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([cycleId, employeeId])
+  @@index([outletId])
+}
+
+model PerformanceReview {
+  id             String    @id @default(cuid())
+  companyId      String
+  outletId       String?
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cycleId        String
+  employeeId     String
+  selfSummary    String    @default("")
+  selfRating     Int       @default(0)
+  selfDoneAt     DateTime?
+  managerId      String    @default("")
+  managerSummary String    @default("")
+  managerRating  Int       @default(0)
+  managerDoneAt  DateTime?
+  finalRating    Int       @default(0)
+  finalNote      String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([cycleId, employeeId])
+  @@index([outletId])
+}
+
+model Survey {
+  id            String   @id @default(cuid())
+  companyId     String
+  outletId      String?
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title         String
+  intro         String   @default("")
+  anonymous     Boolean  @default(true)
+  /// draft, open or closed
+  status        String   @default("draft")
+  closesOn      String   @default("")
+  questionsJson String   @default("[]")
+  audienceJson  String   @default("{}")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([outletId])
+}
+
+/// Answers to a survey. employeeId stays empty when the survey is anonymous.
+model SurveyAnswer {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  surveyId     String
+  employeeId   String   @default("")
+  departmentId String   @default("")
+  answersJson  String   @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@index([surveyId])
+}
+
+/// Who has answered a survey, kept apart from the answers so anonymous answers cannot be traced.
+model SurveyTaken {
+  id         String   @id @default(cuid())
+  companyId  String
+  surveyId   String
+  employeeId String
+  createdAt  DateTime @default(now())
+
+  @@unique([surveyId, employeeId])
+}
+
+/// How one person splits their flexible pay for a financial year.
+model FlexChoice {
+  id          String   @id @default(cuid())
+  companyId   String
+  outletId    String?
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId  String
+  year        String
+  choicesJson String   @default("{}")
+  /// draft, submitted, approved or returned
+  status      String   @default("draft")
+  note        String   @default("")
+  decidedBy   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, employeeId, year])
+  @@index([outletId])
+}
+
+/// A key role and the people who could step into it.
+model SuccessionPlan {
+  id             String   @id @default(cuid())
+  companyId      String
+  outletId       String?
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role           String
+  incumbentId    String   @default("")
+  /// low, medium or high
+  impact         String   @default("medium")
+  risk           String   @default("medium")
+  note           String   @default("")
+  successorsJson String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([outletId])
+}

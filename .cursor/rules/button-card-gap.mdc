@@ -1,0 +1,12 @@
+---
+description: Keep a clear gap between buttons and cards
+alwaysApply: true
+---
+
+# Button and card spacing
+
+A button, link styled as a button, or action row that sits against a card keeps at least 16px of space. The same 16px separates stacked cards. This applies on every screen, in light and dark mode, and in later Altamid projects.
+
+- Put the space in shared CSS (a button or `.actions` followed by `.card` / `.settings-card`) so one screen cannot drift.
+- A save or action row inside a card keeps at least 16px above it, and the card padding keeps the button off the card edge.
+- A back control such as "All connections" is never flush with the card under it.
