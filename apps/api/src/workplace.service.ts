@@ -939,6 +939,258 @@ export class WorkplaceService {
     return rows.filter((row) => company || waitsOn(session, row.flowJson, row.employee.managerId)).slice(0, 50).map((row) => this.presentTime(row));
   }
 
+  /**
+   * One Approvals board: every waiting item plus decided history the sign-in may see.
+   * Kind filter and Waiting / History tabs live on the client.
+   */
+  async approvals(session: SessionUser) {
+    const span = await this.gates.span(session, 'approvals');
+    const canDetails = (await this.gates.holds(session, 'people.edit')) || (await this.gates.holds(session, 'pay'));
+    const company = span === 'company';
+    const none = span === 'none';
+    const pendingWhere = { companyId: session.companyId, status: 'pending' as const, ...(company || none ? {} : mayWaitOn(session)) };
+    const teamDecided = company
+      ? {}
+      : session.employeeId
+        ? { OR: [{ reviewerId: session.id }, { employee: { managerId: session.employeeId } }] }
+        : { reviewerId: session.id };
+    const [leaveWait, timeWait, exitWait, detailWait, leaveDone, timeDone, exitDone, detailDone] = await Promise.all([
+      none ? Promise.resolve([]) : this.prisma.leaveRequest.findMany({
+        where: pendingWhere,
+        include: { leaveType: true, employee: true },
+        orderBy: { createdAt: 'asc' },
+        take: company ? 80 : 200,
+      }),
+      none ? Promise.resolve([]) : this.prisma.attendanceRequest.findMany({
+        where: pendingWhere,
+        include: { employee: true },
+        orderBy: { createdAt: 'asc' },
+        take: company ? 80 : 200,
+      }),
+      none ? Promise.resolve([]) : this.prisma.exitRequest.findMany({
+        where: {
+          companyId: session.companyId,
+          status: 'pending',
+          ...(session.employeeId ? { employeeId: { not: session.employeeId } } : {}),
+          ...(company ? {} : mayWaitOn(session)),
+        },
+        include: { employee: true },
+        orderBy: { createdAt: 'asc' },
+        take: 80,
+      }),
+      canDetails
+        ? this.prisma.detailChange.findMany({
+            where: { companyId: session.companyId, status: 'pending' },
+            include: { employee: true },
+            orderBy: { createdAt: 'asc' },
+            take: 80,
+          })
+        : Promise.resolve([]),
+      none ? Promise.resolve([]) : this.prisma.leaveRequest.findMany({
+        where: { companyId: session.companyId, status: { in: ['approved', 'rejected', 'cancelled'] }, ...teamDecided },
+        include: { leaveType: true, employee: true },
+        orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+      }),
+      none ? Promise.resolve([]) : this.prisma.attendanceRequest.findMany({
+        where: { companyId: session.companyId, status: { in: ['approved', 'rejected', 'cancelled'] }, ...teamDecided },
+        include: { employee: true },
+        orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+      }),
+      none ? Promise.resolve([]) : this.prisma.exitRequest.findMany({
+        where: {
+          companyId: session.companyId,
+          status: { in: ['accepted', 'declined', 'cancelled'] },
+          ...(company ? {} : session.employeeId ? { employee: { managerId: session.employeeId } } : { id: 'none' }),
+        },
+        include: { employee: true },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      canDetails
+        ? this.prisma.detailChange.findMany({
+            where: {
+              companyId: session.companyId,
+              status: { in: ['approved', 'rejected', 'cancelled'] },
+              ...(company ? {} : { decidedBy: session.id }),
+            },
+            include: { employee: true },
+            orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }],
+            take: 100,
+          })
+        : Promise.resolve([]),
+    ]);
+    const waitingLeave = leaveWait.filter((row) => company || waitsOn(session, row.flowJson, row.employee.managerId)).slice(0, 50);
+    const waitingTime = timeWait.filter((row) => company || waitsOn(session, row.flowJson, row.employee.managerId)).slice(0, 50);
+    const waitingExit = exitWait.filter((row) => company || waitsOn(session, row.flowJson, row.employee.managerId)).slice(0, 50);
+    const waiting = [
+      ...waitingLeave.map((row) => this.approvalLeave(row, true)),
+      ...waitingTime.map((row) => this.approvalTime(row, true)),
+      ...waitingExit.map((row) => this.approvalExit(row, true)),
+      ...detailWait.map((row) => this.approvalDetails(row, session, true)),
+    ].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
+    const history = [
+      ...leaveDone.map((row) => this.approvalLeave(row, false)),
+      ...timeDone.map((row) => this.approvalTime(row, false)),
+      ...exitDone.map((row) => this.approvalExit(row, false)),
+      ...detailDone.map((row) => this.approvalDetails(row, session, false)),
+    ].sort((a, b) => (b.decidedAt || b.sentAt).localeCompare(a.decidedAt || a.sentAt));
+    return {
+      waiting,
+      history,
+      counts: {
+        waiting: waiting.length,
+        leave: waiting.filter((row) => row.kind === 'leave').length,
+        attendance: waiting.filter((row) => row.kind === 'attendance').length,
+        resignation: waiting.filter((row) => row.kind === 'resignation').length,
+        details: waiting.filter((row) => row.kind === 'details').length,
+        history: history.length,
+      },
+    };
+  }
+
+  private approvalLeave(
+    row: {
+      id: string; startsOn: string; endsOn: string; days: number; portion?: string; reason: string; status: string; reviewNote: string;
+      createdAt: Date; decidedAt: Date | null; flowJson?: string;
+      leaveType: { name: string; code: string };
+      employee: { id: string; firstName: string; lastName: string; code: string; managerId?: string | null };
+    },
+    canDecide: boolean,
+  ) {
+    const stage = stageOf(row.flowJson || '', row.status);
+    const when = row.startsOn === row.endsOn ? row.startsOn : `${row.startsOn} → ${row.endsOn}`;
+    return {
+      id: row.id,
+      kind: 'leave' as const,
+      kindLabel: 'Leave',
+      person: `${row.employee.firstName} ${row.employee.lastName}`.trim(),
+      personCode: row.employee.code,
+      employeeId: row.employee.id,
+      title: row.leaveType.name,
+      when,
+      meta: `${this.charged(row)} day${this.charged(row) === 1 ? '' : 's'}`,
+      reason: row.reason || row.reviewNote || '',
+      status: row.status,
+      statusLabel: this.statusLabel(row.status),
+      stageLabel: stage ? (stage.of > 1 ? `Step ${stage.step} of ${stage.of}` : 'Single step') : 'Reporting manager',
+      stageSub: stage?.label || '',
+      sentAt: row.createdAt.toISOString(),
+      decidedAt: row.decidedAt?.toISOString() || '',
+      canDecide,
+      fields: [] as Array<{ key: string; label: string; before: string; after: string }>,
+      own: false,
+    };
+  }
+
+  private approvalTime(
+    row: {
+      id: string; kind: string; day: string; endsOn?: string; hours?: string; inTime: string; outTime: string; place: string; reason: string; status: string;
+      reviewNote?: string; createdAt: Date; decidedAt: Date | null; flowJson?: string;
+      employee: { id: string; firstName: string; lastName: string; code: string };
+    },
+    canDecide: boolean,
+  ) {
+    const stage = stageOf(row.flowJson || '', row.status);
+    const span = row.endsOn && row.endsOn !== row.day ? `${row.day} → ${row.endsOn}` : row.day;
+    const meta = row.hours ? `${row.hours} h` : row.inTime ? `${row.inTime}–${row.outTime}` : row.place || '';
+    return {
+      id: row.id,
+      kind: 'attendance' as const,
+      kindLabel: 'Attendance',
+      person: `${row.employee.firstName} ${row.employee.lastName}`.trim(),
+      personCode: row.employee.code,
+      employeeId: row.employee.id,
+      title: this.timeKindLabel(row.kind),
+      when: span,
+      meta,
+      reason: row.reason || row.reviewNote || '',
+      status: row.status,
+      statusLabel: this.statusLabel(row.status),
+      stageLabel: stage ? (stage.of > 1 ? `Step ${stage.step} of ${stage.of}` : 'Single step') : 'Reporting manager',
+      stageSub: stage?.label || '',
+      sentAt: row.createdAt.toISOString(),
+      decidedAt: row.decidedAt?.toISOString() || '',
+      canDecide,
+      fields: [] as Array<{ key: string; label: string; before: string; after: string }>,
+      own: false,
+    };
+  }
+
+  private approvalExit(
+    row: {
+      id: string; lastDay: string; reason: string; status: string; note: string; createdAt: Date; flowJson: string;
+      employee: { id: string; firstName: string; lastName: string; code: string };
+    },
+    canDecide: boolean,
+  ) {
+    const stage = stageOf(row.flowJson || '', row.status);
+    return {
+      id: row.id,
+      kind: 'resignation' as const,
+      kindLabel: 'Resignation',
+      person: `${row.employee.firstName} ${row.employee.lastName}`.trim(),
+      personCode: row.employee.code,
+      employeeId: row.employee.id,
+      title: 'Resignation',
+      when: row.lastDay,
+      meta: 'Last day',
+      reason: row.reason || row.note || '',
+      status: row.status,
+      statusLabel: this.statusLabel(row.status),
+      stageLabel: stage ? (stage.of > 1 ? `Step ${stage.step} of ${stage.of}` : 'Single step') : 'Reporting manager',
+      stageSub: stage?.label || '',
+      sentAt: row.createdAt.toISOString(),
+      decidedAt: '',
+      canDecide,
+      fields: [] as Array<{ key: string; label: string; before: string; after: string }>,
+      own: false,
+    };
+  }
+
+  private approvalDetails(
+    row: {
+      id: string; fields: string; payloadEnc: string; status: string; note: string; decidedBy: string; decidedAt: Date | null;
+      createdAt: Date; updatedAt: Date; employeeId: string;
+      employee: { id: string; firstName: string; lastName: string; code: string };
+    },
+    session: SessionUser,
+    canDecide: boolean,
+  ) {
+    const labels = row.fields.split(',').map((key) => key.trim()).filter(Boolean);
+    const own = row.employeeId === session.employeeId;
+    return {
+      id: row.id,
+      kind: 'details' as const,
+      kindLabel: 'Pay details',
+      person: `${row.employee.firstName} ${row.employee.lastName}`.trim(),
+      personCode: row.employee.code,
+      employeeId: row.employee.id,
+      title: 'Pay detail change',
+      when: labels.length ? labels.join(', ') : 'Details',
+      meta: '',
+      reason: row.note || '',
+      status: row.status,
+      statusLabel: this.statusLabel(row.status),
+      stageLabel: canDecide && !own ? 'HR / Payroll' : own ? 'Needs another approver' : 'HR / Payroll',
+      stageSub: '',
+      sentAt: row.updatedAt.toISOString(),
+      decidedAt: row.decidedAt?.toISOString() || '',
+      canDecide: canDecide && !own && row.status === 'pending',
+      fields: [] as Array<{ key: string; label: string; before: string; after: string }>,
+      own,
+    };
+  }
+
+  private statusLabel(status: string): string {
+    if (status === 'pending') return 'Waiting';
+    if (status === 'approved' || status === 'accepted') return 'Approved';
+    if (status === 'rejected' || status === 'declined') return 'Rejected';
+    if (status === 'cancelled') return 'Cancelled';
+    return status;
+  }
+
   timeKindLabel(kind: string): string {
     return kind === 'wfh' ? 'Work from home' : kind === 'onduty' ? 'On duty' : kind === 'extratime' ? 'Extra time' : 'Regularization';
   }

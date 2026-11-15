@@ -904,6 +904,23 @@ export class HrmsController {
     return this.workplace.createAnnouncement(request.session, body);
   }
 
+  @Get('approvals')
+  async approvalsBoard(@Req() request: RequestWithSession) {
+    const board = await this.workplace.approvals(request.session);
+    try {
+      const details = await this.self.queue(request.session);
+      const byId = new Map(details.map((row) => [row.id, row]));
+      for (const row of board.waiting) {
+        if (row.kind !== 'details') continue;
+        const full = byId.get(row.id);
+        if (full) row.fields = full.fields;
+      }
+    } catch {
+      // No pay-detail access — leave those rows without field diffs.
+    }
+    return board;
+  }
+
   @Get('leave')
   leave(@Req() request: RequestWithSession) {
     return this.workplace.leave(request.session);
