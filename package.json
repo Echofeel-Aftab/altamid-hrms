@@ -9,9 +9,9 @@
     "api": "npm --prefix apps/api run start:dev",
     "web": "npm --prefix apps/web start",
     "test": "npm --prefix apps/api test",
-    "postinstall": "npm --prefix apps/api install --include=dev && npm --prefix apps/web install --include=dev && npm --prefix apps/api exec prisma generate",
-    "build": "npm --prefix apps/web run build -- --configuration=production && npm --prefix apps/api run build && npm --prefix apps/api exec prisma generate",
+    "postinstall": "npm --prefix apps/api install --include=dev && npm --prefix apps/web install --include=dev && npm --prefix apps/api run prisma:generate",
+    "build": "npm --prefix apps/web run build -- --configuration=production && npm --prefix apps/api run build && npm --prefix apps/api run prisma:generate",
     "start": "node server.js",
-    "seed:demo": "npm --prefix apps/api exec node scripts/sample-meridian.cjs"
+    "seed:demo": "npm --prefix apps/api run seed:demo"
   }
 }
