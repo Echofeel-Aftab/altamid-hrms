@@ -25,7 +25,16 @@ interface Licence {
   reason: string;
   message: string;
   checkedAt: string | null;
+  product: string;
+  packageLabel: string;
   seats: number;
+  seatLimit: number | null;
+  termStartsAt: string | null;
+  termEndsAt: string | null;
+  status: string;
+  hasKey: boolean;
+  active: boolean;
+  keyHint: string;
   bindingHost: string;
   outlets?: { allowed: number; units: Array<{ subscriptionId: string; main: boolean; usable: boolean; verdict: string; termEndsAt: string; seatsUsed: number | null }> };
 }
@@ -103,49 +112,53 @@ interface Licence {
         @case ('licence') {
           @if (error) { <p class="form-error">{{ error }}</p> }
           @if (ok) { <p class="form-ok">{{ ok }}</p> }
-          <form class="settings-card" (ngSubmit)="check()">
-            <header class="settings-card-head">
-              <span class="settings-icon"><i class="bi bi-key"></i></span>
-              <div>
-                <h2>Altamid Control</h2>
-                <p>This server checks in with product code hrms-payroll and obeys the signed lease</p>
-              </div>
-            </header>
-            <div class="settings-card-body">
-              @if (licence) {
-                <p data-inline-message [class]="licence.mode === 'allow' ? 'form-ok' : licence.mode === 'restrict' ? 'form-error' : 'banner'">{{ licence.message }}</p>
-              }
-              <div class="field-grid">
-                <div><label for="key">License key</label><input id="key" name="key" [(ngModel)]="licenseKey" placeholder="AS1.HRMS.…"></div>
-                <div><label for="host">Binding host</label><input id="host" name="host" [(ngModel)]="bindingHost"></div>
-              </div>
-              <div class="settings-inline-save">
-                <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-check2"></i> {{ busy ? 'Checking…' : 'Save and check in' }}</button>
-              </div>
-            </div>
-          </form>
-          @if (licence?.outlets; as outlets) {
-            <section class="settings-card">
+          @if (licence?.hasKey) {
+            <section class="settings-card licence-card">
               <header class="settings-card-head">
-                <span class="settings-icon"><i class="bi bi-diagram-3"></i></span>
+                <span class="settings-icon"><i class="bi bi-key"></i></span>
                 <div>
-                  <h2>Outlets on this licence</h2>
-                  <p>Each HRMS subscription opens one outlet. Manage people and copy setup under More → Outlets.</p>
+                  <h2>Licence</h2>
+                  <p>Features stay on while this key is valid with Altamid Control.</p>
+                </div>
+                <span [class]="'chip ' + (licence!.active ? 'is-ok' : 'is-bad')">{{ licence!.active ? 'Active' : unitVerdict(licence!.status || licence!.reason) }}</span>
+              </header>
+              <div class="settings-card-body">
+                <p data-inline-message [class]="licence!.active ? 'form-ok' : 'form-error'">{{ licence!.message }}</p>
+                <dl class="licence-facts">
+                  <div><dt>Package</dt><dd>{{ licence!.packageLabel || licence!.product }}</dd></div>
+                  <div><dt>License key</dt><dd class="mono">{{ licence!.keyHint || '••••' }}</dd></div>
+                  <div><dt>Expires</dt><dd>{{ licence!.termEndsAt ? unitEnd(licence!.termEndsAt) : '—' }}</dd></div>
+                  <div><dt>People</dt><dd>{{ licence!.seats }}@if (licence!.seatLimit !== null) { / {{ licence!.seatLimit }} }</dd></div>
+                  @if (licence!.outlets?.allowed) {
+                    <div><dt>Outlets</dt><dd>{{ licence!.outlets!.allowed }} allowed</dd></div>
+                  }
+                </dl>
+                <div class="settings-inline-save licence-actions">
+                  <button type="button" class="btn btn-ghost" [disabled]="!!busy" (click)="testLicence()"><i class="bi bi-wifi"></i> {{ busy === 'test' ? 'Testing…' : 'Test connection' }}</button>
+                  <button type="button" class="btn btn-ghost btn-danger" [disabled]="!!busy" (click)="deactivateLicence()"><i class="bi bi-x-circle"></i> {{ busy === 'off' ? 'Deactivating…' : 'Deactivate' }}</button>
+                </div>
+              </div>
+            </section>
+          } @else {
+            <form class="settings-card" (ngSubmit)="activateLicence()">
+              <header class="settings-card-head">
+                <span class="settings-icon"><i class="bi bi-key"></i></span>
+                <div>
+                  <h2>Activate licence</h2>
+                  <p>Paste the license key from Altamid Control. Binding to this host is automatic.</p>
                 </div>
               </header>
               <div class="settings-card-body">
-                <p><strong>{{ outlets.allowed }}</strong> {{ outlets.allowed === 1 ? 'outlet' : 'outlets' }} allowed on this install.</p>
-                @for (unit of outlets.units; track unit.subscriptionId; let index = $index) {
-                  <div class="outlet-unit">
-                    <span><strong>{{ unit.main ? 'Main subscription' : 'Outlet subscription ' + index }}</strong><small>Term ends {{ unitEnd(unit.termEndsAt) }}@if (unit.seatsUsed !== null) { · {{ unit.seatsUsed }} people }</small></span>
-                    <span [class]="'chip ' + (unit.usable ? 'is-ok' : 'is-bad')">{{ unit.usable ? 'Usable' : unitVerdict(unit.verdict) }}</span>
-                  </div>
+                @if (licence) {
+                  <p class="muted">{{ licence.message }}</p>
                 }
-                @if (!outlets.units.length) {
-                  <p class="muted">This install runs one outlet. To open more, ask Altamid to add another HRMS subscription as an outlet of this one.</p>
-                }
+                <label for="key">License key</label>
+                <input id="key" name="key" [(ngModel)]="licenseKey" placeholder="AS1.HRMS.…" autocomplete="off" required>
+                <div class="settings-inline-save">
+                  <button class="btn btn-gold" type="submit" [disabled]="!!busy || !licenseKey.trim()"><i class="bi bi-check2"></i> {{ busy === 'on' ? 'Activating…' : 'Activate' }}</button>
+                </div>
               </div>
-            </section>
+            </form>
           }
         }
         @case ('password') {
@@ -165,7 +178,7 @@ interface Licence {
                 <div><label for="next">New password</label><input id="next" name="next" type="password" [(ngModel)]="next"></div>
               </div>
               <div class="settings-inline-save">
-                <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-check2"></i> Update password</button>
+                <button class="btn btn-gold" type="submit" [disabled]="!!busy"><i class="bi bi-check2"></i> Update password</button>
               </div>
             </div>
           </form>
@@ -185,7 +198,7 @@ interface Licence {
           <label for="next">New password</label>
           <input id="next" name="next" type="password" [(ngModel)]="next">
           <div class="settings-inline-save">
-            <button class="btn btn-gold" type="submit" [disabled]="busy">Update password</button>
+            <button class="btn btn-gold" type="submit" [disabled]="!!busy">Update password</button>
           </div>
         </div>
       </form>
@@ -218,12 +231,11 @@ export class SettingsComponent implements OnInit {
   moreOpen = false;
   licence: Licence | null = null;
   licenseKey = '';
-  bindingHost = 'localhost';
   current = '';
   next = '';
   error = '';
   ok = '';
-  busy = false;
+  busy: '' | 'on' | 'off' | 'test' | 'password' = '';
 
   get canSettings(): boolean {
     return !!this.me?.access?.includes('settings');
@@ -287,7 +299,7 @@ export class SettingsComponent implements OnInit {
       templates: 'Email subjects and bodies. Pair with Email (SMTP) and Rules automation for auto-send.',
       numbering: 'Prefixes and sequences for people, payslips and requests.',
       attendance: 'Where people can check in, shift times, weekly off and office geofences.',
-      licence: 'Yearly subscription for this install via Altamid Control.',
+      licence: 'Paste a license key to activate. When it is valid, HRMS features unlock for this install.',
       password: 'Change the password for this sign-in only.',
       rules: 'People defaults (probation, notice), leave types, daily reminders, and hiring re-apply gaps. Approval chains are under Approvals.',
       flows: 'Who approves leave, attendance fixes, WFH and resignation — up to three steps. New requests follow these; open ones keep their old chain.',
@@ -315,7 +327,6 @@ export class SettingsComponent implements OnInit {
     if (!allowed.includes(this.tab)) this.tab = allowed[0] || 'password';
     if (!this.canSettings) return;
     this.licence = await this.api.get<Licence>('/v1/licence');
-    this.bindingHost = this.licence.bindingHost || 'localhost';
   }
 
   go(id: string): void {
@@ -337,31 +348,66 @@ export class SettingsComponent implements OnInit {
   }
 
   unitVerdict(verdict: string): string {
-    const words: Record<string, string> = { expired: 'Expired', suspended: 'Suspended', cancelled: 'Cancelled', revoked: 'Revoked', not_started: 'Not started', seats_exceeded: 'Over its seat limit' };
-    return words[verdict] || 'Paused';
+    const words: Record<string, string> = {
+      expired: 'Expired',
+      suspended: 'Suspended',
+      cancelled: 'Cancelled',
+      revoked: 'Revoked',
+      not_started: 'Not started',
+      seats_exceeded: 'Over seats',
+      unlicensed: 'No key',
+      no_lease: 'Not checked in',
+      setup: 'Inactive',
+      active: 'Active',
+      grace: 'Grace',
+      past_due: 'Past due',
+    };
+    return words[verdict] || (verdict ? verdict.replace(/_/g, ' ') : 'Paused');
   }
 
-  async check(): Promise<void> {
-    this.busy = true;
+  async activateLicence(): Promise<void> {
+    const key = this.licenseKey.trim();
+    if (!key) {
+      this.error = 'Paste a license key to activate.';
+      return;
+    }
+    await this.runLicence('on', { licenseKey: key }, 'Licence activated.');
+    this.licenseKey = '';
+  }
+
+  async deactivateLicence(): Promise<void> {
+    if (!window.confirm('Deactivate this licence? New people and payroll stay paused until you activate a key again.')) return;
+    await this.runLicence('off', { licenseKey: '' }, 'Licence deactivated.');
+  }
+
+  async testLicence(): Promise<void> {
+    await this.runLicence('test', {}, 'Connection to Altamid Control is working.');
+  }
+
+  private async runLicence(kind: 'on' | 'off' | 'test', body: Record<string, string>, ok: string): Promise<void> {
+    this.busy = kind;
     this.error = '';
     this.ok = '';
     try {
-      const body: { bindingHost: string; licenseKey?: string } = { bindingHost: this.bindingHost };
-      if (this.licenseKey.trim()) body.licenseKey = this.licenseKey.trim();
       this.licence = await this.api.post<Licence>('/v1/licence/check', body);
-      this.licenseKey = '';
       this.store.me = await this.api.get<Me>('/v1/me');
       this.me = this.store.me;
-      this.ok = 'Control check finished.';
+      if (kind === 'on' && !this.licence.active) {
+        this.error = this.licence.message || 'That key did not activate.';
+      } else if (kind === 'test' && !this.licence.active) {
+        this.error = this.licence.message || 'Control answered, but this licence is not usable.';
+      } else {
+        this.ok = ok;
+      }
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Check failed.';
+      this.error = error instanceof Error ? error.message : 'Could not reach Altamid Control.';
     } finally {
-      this.busy = false;
+      this.busy = '';
     }
   }
 
   async changePassword(): Promise<void> {
-    this.busy = true;
+    this.busy = 'password';
     this.error = '';
     this.ok = '';
     try {
@@ -372,7 +418,7 @@ export class SettingsComponent implements OnInit {
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not update password.';
     } finally {
-      this.busy = false;
+      this.busy = '';
     }
   }
 }

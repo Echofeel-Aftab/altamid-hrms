@@ -724,7 +724,10 @@ export class HrmsController {
     await this.gates.gate(request.session, 'settings', 'You do not have access to connect Altamid Control.');
     const input = bag(body);
     const licenseKey = input.licenseKey === undefined ? null : optional(input.licenseKey, 120);
-    const bindingHost = input.bindingHost === undefined ? null : text(input.bindingHost, 'Binding host', 200);
+    // Binding host is optional — the server uses WEB_ORIGIN when the owner only pastes a key.
+    const bindingHost = input.bindingHost === undefined || input.bindingHost === null || input.bindingHost === ''
+      ? null
+      : text(input.bindingHost, 'Binding host', 200);
     return this.licence.saveAndCheck(request.session.companyId, licenseKey, bindingHost);
   }
 

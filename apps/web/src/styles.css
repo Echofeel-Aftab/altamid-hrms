@@ -1558,6 +1558,17 @@ html.theme-dark .settings-subhead { color: #fff; }
 .outlet-unit:first-of-type { border-top: 0; padding-top: 0; }
 .outlet-unit span:first-child { display: grid; gap: 2px; min-width: 0; }
 .outlet-unit small { color: var(--muted); }
+.licence-card .settings-card-head .chip { margin-left: auto; }
+.licence-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 16px;
+  margin: 16px 0 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
+}
+.licence-facts div { display: grid; gap: 2px; min-width: 0; }
+.licence-facts dt { margin: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+.licence-facts dd { margin: 0; font-size: 14px; color: var(--text); font-weight: 700; }
+html.theme-dark .licence-facts dd { color: #fff; }
+.licence-facts .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; letter-spacing: 0.02em; }
+.licence-actions { gap: 10px; }
 .settings-card-head .outlet-add { margin-left: auto; }
 .outlet-note { margin: 0 0 16px; }
 .outlet-note.banner { display: flex; align-items: flex-start; gap: 8px; }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Company } from '@prisma/client';
-import { dataKey, openSecret, seal } from './crypto';
+import { dataKey, maskSecret, openSecret, seal } from './crypto';
 import { fail } from './http';
 import { decideAccess, isVerdict, LeaseV1, verdictMessage } from './lease/policy';
 import { verifyLeaseSignature } from './lease/verify';
@@ -8,13 +8,26 @@ import { currentScope, unscoped } from './outlet-context';
 import { PrismaService } from './prisma.service';
 import { PRODUCT_CODE, PRODUCT_VERSION } from './version';
 
+const PACKAGE_LABELS: Record<string, string> = {
+  'hrms-payroll': 'HRMS & Payroll',
+  crm: 'CRM',
+};
+
 export interface LicenceView {
   mode: 'setup' | 'allow' | 'restrict';
   reason: string;
   message: string;
   checkedAt: string | null;
   product: string;
+  packageLabel: string;
   seats: number;
+  seatLimit: number | null;
+  termStartsAt: string | null;
+  termEndsAt: string | null;
+  status: string;
+  hasKey: boolean;
+  active: boolean;
+  keyHint: string;
   bindingHost: string;
   outlets: OutletAllowance;
 }
@@ -82,6 +95,7 @@ export class LicenceService {
   }
 
   async saveAndCheck(companyId: string, licenseKey: string | null, bindingHost: string | null): Promise<LicenceView> {
+    const company = await this.company(companyId);
     const data: { licenseKeyEnc?: string; bindingHost?: string; leaseJson?: string; leaseCheckedAt?: null } = {};
     if (licenseKey !== null) {
       data.licenseKeyEnc = licenseKey ? seal(licenseKey.trim(), this.key) : '';
@@ -90,13 +104,27 @@ export class LicenceService {
         data.leaseCheckedAt = null;
       }
     }
-    if (bindingHost) data.bindingHost = bindingHost;
+    const host = (bindingHost || '').trim() || this.defaultHost() || company.bindingHost || '';
+    if (host && (bindingHost || (licenseKey && licenseKey.trim()) || !company.bindingHost)) {
+      data.bindingHost = host;
+    }
     if (Object.keys(data).length) {
       await this.prisma.company.update({ where: { id: companyId }, data });
     }
-    const company = await this.company(companyId);
-    if (!company.licenseKeyEnc) return this.toView(company, await this.seats(companyId));
+    const next = await this.company(companyId);
+    if (!next.licenseKeyEnc) return this.toView(next, await this.seats(companyId));
     return this.checkIn(companyId);
+  }
+
+  /** Hostname from WEB_ORIGIN so the owner only pastes the license key. */
+  private defaultHost(): string {
+    const origin = (process.env.WEB_ORIGIN || '').trim().replace(/\/$/, '');
+    if (!origin) return '';
+    try {
+      return new URL(origin).hostname;
+    } catch {
+      return origin.replace(/^https?:\/\//i, '').split('/')[0] || '';
+    }
   }
 
   /** Checks in with Altamid Control when the stored lease is older than 15 minutes. */
@@ -234,41 +262,63 @@ export class LicenceService {
   }
 
   private toView(company: Company, seats: number): LicenceView {
-    if (!company.licenseKeyEnc) {
+    const hasKey = Boolean(company.licenseKeyEnc);
+    const keyHint = hasKey ? maskSecret(openSecret(company.licenseKeyEnc, this.key) || '••••') : '';
+    const base = {
+      checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
+      seats,
+      bindingHost: company.bindingHost,
+      hasKey,
+      keyHint,
+    };
+    if (!hasKey) {
       return {
+        ...base,
         mode: 'setup',
         reason: 'setup',
-        message: 'This company is not connected to Altamid Control yet. Add the license key in Settings when this install should follow a subscription.',
-        checkedAt: null,
+        message: 'Paste the license key from Altamid Control and choose Activate. Features stay paused until the key is valid.',
         product: PRODUCT_CODE,
-        seats,
-        bindingHost: company.bindingHost,
+        packageLabel: PACKAGE_LABELS[PRODUCT_CODE] || PRODUCT_CODE,
+        seatLimit: null,
+        termStartsAt: null,
+        termEndsAt: null,
+        status: '',
+        active: false,
         outlets: this.allowance(null),
       };
     }
     const lease = this.readLease(company.leaseJson);
     if (!lease || !isVerdict(lease.verdict)) {
       return {
+        ...base,
         mode: 'restrict',
         reason: 'no_lease',
         message: 'Waiting for the first successful check-in with Altamid Control. New people stay paused until then. Existing records stay available.',
-        checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
         product: PRODUCT_CODE,
-        seats,
-        bindingHost: company.bindingHost,
+        packageLabel: PACKAGE_LABELS[PRODUCT_CODE] || PRODUCT_CODE,
+        seatLimit: null,
+        termStartsAt: null,
+        termEndsAt: null,
+        status: '',
+        active: false,
         outlets: this.allowance(null),
       };
     }
+    const product = lease.product || PRODUCT_CODE;
     return {
+      ...base,
       mode: lease.usable ? 'allow' : 'restrict',
       reason: lease.verdict,
       message: lease.usable
         ? verdictMessage(lease.verdict)
         : verdictMessage(lease.verdict) + ' New people and payroll runs stay paused. Existing records stay available.',
-      checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
-      product: PRODUCT_CODE,
-      seats,
-      bindingHost: company.bindingHost,
+      product,
+      packageLabel: PACKAGE_LABELS[product] || product,
+      seatLimit: lease.seats?.limit ?? null,
+      termStartsAt: lease.termStartsAt || null,
+      termEndsAt: lease.termEndsAt || null,
+      status: lease.status || lease.verdict,
+      active: lease.usable === true,
       outlets: this.allowance(lease),
     };
   }
