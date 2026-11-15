@@ -61,7 +61,8 @@ async function bootstrap() {
       if (req.path.startsWith('/v1')) return next();
       return expressStatic(web, { index: false })(req, res, next);
     });
-    expressApp.get('*', (req: Request, res: Response, next: NextFunction) => {
+    // Express 5 / path-to-regexp 8: named wildcard required (bare '*' throws)
+    expressApp.get('/{*path}', (req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/v1')) return next();
       res.sendFile(join(web, 'index.html'), (err) => (err ? next(err) : undefined));
     });
