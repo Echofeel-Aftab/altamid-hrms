@@ -6,6 +6,7 @@ import { OUTLET_MODELS, OutletScope, SHARED_MODELS, unscoped } from './outlet-co
 import { PrismaService } from './prisma.service';
 import { ROLES } from './roles';
 import { SessionUser } from './session';
+import { TtlCache } from './ttl-cache';
 
 const COUNTRIES = ['IN', 'US', 'GB', 'AE', 'SG', 'AU', 'CA', 'DE', 'NL', 'SA', 'QA', 'NP', 'BD', 'LK', 'OTHER'] as const;
 const SETUP_PARTS = ['departments', 'locations', 'teams', 'leaveTypes', 'holidays'] as const;
@@ -23,6 +24,7 @@ type Delegate = { updateMany(args: unknown): Promise<{ count: number }> };
 @Injectable()
 export class OutletService implements OnModuleInit {
   private readonly log = new Logger('Outlets');
+  private readonly accessCache = new TtlCache<OutletAccess>(30_000);
 
   constructor(private readonly prisma: PrismaService, private readonly licence: LicenceService) {}
 
@@ -59,10 +61,18 @@ export class OutletService implements OnModuleInit {
 
   /** Which outlet a request works in. A master may ask for every outlet with "all". */
   async access(user: User, asked: string): Promise<OutletAccess> {
-    let outlets = await this.prisma.outlet.findMany({ where: { companyId: user.companyId, status: 'active' }, orderBy: { createdAt: 'asc' }, select: { id: true, country: true } });
+    const cacheKey = `${user.id}:${asked || ''}:${user.master ? 1 : 0}:${user.role}`;
+    return this.accessCache.remember(cacheKey, () => this.resolveAccess(user, asked));
+  }
+
+  private async resolveAccess(user: User, asked: string): Promise<OutletAccess> {
+    const [outletsRaw, links] = await Promise.all([
+      this.prisma.outlet.findMany({ where: { companyId: user.companyId, status: 'active' }, orderBy: { createdAt: 'asc' }, select: { id: true, country: true } }),
+      this.prisma.userOutlet.findMany({ where: { userId: user.id }, select: { outletId: true, role: true } }),
+    ]);
+    let outlets = outletsRaw;
     if (!outlets.length) outlets = [await this.ensureHead(user.companyId)];
     const ids = outlets.map((row) => row.id);
-    const links = await this.prisma.userOutlet.findMany({ where: { userId: user.id }, select: { outletId: true, role: true } });
     let mine = ids;
     if (!user.master) {
       const own = user.employeeId ? (await unscoped(() => this.prisma.employee.findUnique({ where: { id: user.employeeId! }, select: { outletId: true } })))?.outletId : null;
@@ -79,6 +89,11 @@ export class OutletService implements OnModuleInit {
       master: user.master,
       country: current ? outlets.find((row) => row.id === current)?.country || 'IN' : '',
     };
+  }
+
+  forgetAccess(userId: string): void {
+    // Keys include the outlet header; drop the common ones.
+    for (const asked of ['', 'all']) this.accessCache.delete(`${userId}:${asked}:0:`);
   }
 
   /** Outlets this sign-in can switch between, with how each one's subscription stands. */

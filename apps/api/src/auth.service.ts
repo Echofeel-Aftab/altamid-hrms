@@ -9,6 +9,7 @@ import { OutletService } from './outlet.service';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
 import { SettingsService } from './settings.service';
+import { TtlCache } from './ttl-cache';
 
 const WINDOW = new Map<string, number[]>();
 
@@ -16,6 +17,10 @@ const WINDOW = new Map<string, number[]>();
 export class AuthService {
   private readonly secret = loadSecret('jwt.key');
   private dummy = '';
+  private readonly userCache = new TtlCache<{
+    id: string; companyId: string; email: string; name: string; role: string; active: boolean; master: boolean;
+    employeeId: string | null; passwordHash: string; failedCount: number; lockedUntil: Date | null;
+  }>(20_000);
 
   constructor(private readonly prisma: PrismaService, private readonly settings: SettingsService, private readonly outlets: OutletService) {}
 
@@ -45,10 +50,16 @@ export class AuthService {
     } catch {
       fail(401, 'Sign in to continue.');
     }
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.active) fail(401, 'Sign in to continue.');
+    let user = this.userCache.get(userId);
+    if (!user) {
+      const row = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!row) fail(401, 'Sign in to continue.');
+      user = row;
+      this.userCache.set(userId, row);
+    }
+    if (!user.active) fail(401, 'Sign in to continue.');
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) fail(401, 'This sign-in is paused. Try again in a few minutes.');
-    const access = await this.outlets.access(user, String(outletHeader || '').trim().slice(0, 40));
+    const access = await this.outlets.access(user as Parameters<OutletService['access']>[0], String(outletHeader || '').trim().slice(0, 40));
     setScope(access.scope);
     return { ...this.toSession(user), role: access.role, outletId: access.scope.current, outletIds: access.outletIds, master: access.master, outletCountry: access.country };
   }
@@ -65,6 +76,7 @@ export class AuthService {
       fail(401, 'That email or password does not match.');
     }
     await this.prisma.user.update({ where: { id: user.id }, data: { failedCount: 0, lockedUntil: null } });
+    this.userCache.set(user.id, { ...user, failedCount: 0, lockedUntil: null });
     await this.prisma.auditEvent.create({
       data: { companyId: user.companyId, actorId: user.id, action: 'login.ok', entity: 'user', entityId: user.id },
     });
@@ -81,6 +93,7 @@ export class AuthService {
       where: { id: user.id },
       data: { passwordHash: await this.hashPassword(nextPassword), failedCount: 0, lockedUntil: null },
     });
+    this.userCache.delete(user.id);
     await this.prisma.auditEvent.create({
       data: { companyId: user.companyId, actorId: user.id, action: 'password.change', entity: 'user', entityId: user.id },
     });
@@ -121,6 +134,7 @@ export class AuthService {
     if (!user || !user.active) fail(400, 'That link has expired or was already used. Ask for a new one.');
     const next = passwordOf(password);
     await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await this.hashPassword(next), failedCount: 0, lockedUntil: null } });
+    this.userCache.delete(user.id);
     await this.prisma.passwordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } });
     await this.prisma.auditEvent.create({ data: { companyId: user.companyId, actorId: user.id, action: 'password.reset', entity: 'user', entityId: user.id } });
     return { message: 'Your password is set. Sign in with it now.' };
@@ -134,6 +148,7 @@ export class AuthService {
     const count = failedCount + 1;
     const lockedUntil = count >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
     await this.prisma.user.update({ where: { id: userId }, data: { failedCount: lockedUntil ? 0 : count, lockedUntil } });
+    this.userCache.delete(userId);
     await this.prisma.auditEvent.create({
       data: { companyId, actorId: userId, action: lockedUntil ? 'login.locked' : 'login.fail', entity: 'user', entityId: userId, detail: String(count) },
     });
