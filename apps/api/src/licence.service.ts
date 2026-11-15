@@ -167,15 +167,14 @@ export class LicenceService {
       fresh,
       stored,
     });
+    const view = this.toView(await this.company(companyId), seats);
     return {
+      ...view,
       mode: decision.access === 'allow' ? 'allow' : 'restrict',
       reason: decision.reason,
       message: this.message(decision.access, decision.reason, transportFailed),
+      active: decision.access === 'allow',
       checkedAt: new Date().toISOString(),
-      product: PRODUCT_CODE,
-      seats,
-      bindingHost: company.bindingHost,
-      outlets: this.allowance(fresh || stored),
     };
   }
 
