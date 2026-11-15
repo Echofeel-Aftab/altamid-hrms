@@ -15,6 +15,8 @@ export class ApiService {
   token = '';
   /** The outlet sent with every request, or "all" for a master viewing every outlet. Empty until one is chosen. */
   outlet = '';
+  private readonly inflight = new Map<string, Promise<unknown>>();
+  private readonly recent = new Map<string, { at: number; data: unknown }>();
 
   constructor() {
     this.token = typeof localStorage === 'undefined' ? '' : localStorage.getItem(TOKEN_KEY) || '';
@@ -23,6 +25,8 @@ export class ApiService {
 
   setToken(token: string): void {
     this.token = token;
+    this.inflight.clear();
+    this.recent.clear();
     if (typeof localStorage === 'undefined') return;
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else {
@@ -33,13 +37,25 @@ export class ApiService {
 
   setOutlet(outlet: string): void {
     this.outlet = outlet;
+    this.inflight.clear();
+    this.recent.clear();
     if (typeof localStorage === 'undefined') return;
     if (outlet) localStorage.setItem(OUTLET_KEY, outlet);
     else localStorage.removeItem(OUTLET_KEY);
   }
 
   get<T>(path: string): Promise<T> {
-    return this.send('GET', path);
+    const key = 'GET:' + this.outlet + ':' + path;
+    const cached = this.recent.get(key);
+    if (cached && Date.now() - cached.at < 2500) return Promise.resolve(cached.data as T);
+    const pending = this.inflight.get(key);
+    if (pending) return pending as Promise<T>;
+    const request = this.send<T>('GET', path).then((data) => {
+      this.recent.set(key, { at: Date.now(), data });
+      return data;
+    }).finally(() => this.inflight.delete(key));
+    this.inflight.set(key, request);
+    return request;
   }
 
   post<T>(path: string, body?: unknown): Promise<T> {

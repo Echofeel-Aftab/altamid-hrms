@@ -7,6 +7,7 @@ import { PrismaService } from './prisma.service';
 import { richOf } from './rich';
 import { isHr } from './roles';
 import { SessionUser } from './session';
+import { TtlCache } from './ttl-cache';
 
 /** Features whose audience is set here. Which blocks appear on Home is set in Settings → Home layouts. */
 export const HOME_WIDGETS = [
@@ -34,6 +35,8 @@ const FILE_AUDIENCES = ['all', 'person', 'department', 'location', 'managers', '
 
 @Injectable()
 export class LibraryService {
+  private readonly widgetsCache = new TtlCache<Map<string, string>>(60_000);
+
   constructor(private readonly prisma: PrismaService, private readonly gates: AccessService) {}
 
   async widgets(session: SessionUser) {
@@ -57,6 +60,7 @@ export class LibraryService {
         update: { audience },
       });
     }
+    this.widgetsCache.delete(session.companyId);
     return this.widgets(session);
   }
 
@@ -383,7 +387,9 @@ export class LibraryService {
   }
 
   private async saved(companyId: string): Promise<Map<string, string>> {
-    const rows = await this.prisma.homeWidget.findMany({ where: { companyId } });
-    return new Map(rows.map((row) => [row.key, row.audience]));
+    return this.widgetsCache.remember(companyId, async () => {
+      const rows = await this.prisma.homeWidget.findMany({ where: { companyId } });
+      return new Map(rows.map((row) => [row.key, row.audience]));
+    });
   }
 }

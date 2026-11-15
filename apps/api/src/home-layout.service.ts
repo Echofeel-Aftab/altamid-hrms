@@ -241,15 +241,17 @@ export class HomeLayoutService {
   private async permitted(session: SessionUser, employeeId: string): Promise<(block: HomeBlock) => boolean> {
     const features = [...new Set(HOME_BLOCKS.map((block) => block.needs).filter((need): need is string => !!need && need !== 'employee' && need !== 'team'))];
     const held = new Map<string, boolean>();
-    for (const feature of features) held.set(feature, await this.gates.holds(session, feature));
-    let leads = false;
-    if (employeeId) {
-      const [reports, teams] = await Promise.all([
-        this.prisma.employee.count({ where: { companyId: session.companyId, managerId: employeeId, status: { in: ['active', 'onboarding'] } } }),
-        this.prisma.team.count({ where: { companyId: session.companyId, leadId: employeeId } }),
-      ]);
-      leads = reports + teams > 0;
-    }
+    const [heldList, reports, teams] = await Promise.all([
+      Promise.all(features.map(async (feature) => [feature, await this.gates.holds(session, feature)] as const)),
+      employeeId
+        ? this.prisma.employee.count({ where: { companyId: session.companyId, managerId: employeeId, status: { in: ['active', 'onboarding'] } } })
+        : Promise.resolve(0),
+      employeeId
+        ? this.prisma.team.count({ where: { companyId: session.companyId, leadId: employeeId } })
+        : Promise.resolve(0),
+    ]);
+    for (const [feature, ok] of heldList) held.set(feature, ok);
+    const leads = reports + teams > 0;
     return (block) => {
       if (!block.needs) return true;
       if (block.needs === 'employee') return !!employeeId;

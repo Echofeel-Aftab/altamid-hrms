@@ -129,15 +129,20 @@ export class DirectoryService {
   }
 
   async me(session: SessionUser) {
-    const company = await this.prisma.company.findUnique({ where: { id: session.companyId } });
+    const [company, licence, person, access, canSeePan] = await Promise.all([
+      this.prisma.company.findUnique({ where: { id: session.companyId } }),
+      this.licence.view(session.companyId),
+      session.employeeId
+        ? this.prisma.employee.findFirst({
+            where: { id: session.employeeId, companyId: session.companyId },
+            include: { department: true, location: true, designation: true },
+          })
+        : Promise.resolve(null),
+      this.gates.keys(session),
+      this.gates.holds(session, 'settings'),
+    ]);
     if (!company) fail(404, 'That company was not found.');
-    const licence = await this.licence.view(session.companyId);
-    const person = session.employeeId
-      ? await this.prisma.employee.findFirst({
-          where: { id: session.employeeId, companyId: session.companyId },
-          include: { department: true, location: true, designation: true },
-        })
-      : null;
+    const pan = openSecret(company.panEnc, this.key);
     return {
       id: session.id,
       name: session.name,
@@ -157,11 +162,11 @@ export class DirectoryService {
         state: company.state,
         city: company.city,
         planCode: company.planCode,
-        pan: (await this.gates.holds(session, 'settings')) ? openSecret(company.panEnc, this.key) : maskSecret(openSecret(company.panEnc, this.key)),
+        pan: canSeePan ? pan : maskSecret(pan),
         brand: this.brand.view(company),
       },
       licence: { mode: licence.mode, message: licence.message, reason: licence.reason },
-      access: await this.gates.keys(session),
+      access,
     };
   }
 

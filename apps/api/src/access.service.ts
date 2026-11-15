@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { fail } from './http';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
+import { TtlCache } from './ttl-cache';
 
 export const FEATURES: Array<{ group: string; key: string; label: string; hint: string; roles: string[]; through?: string[] }> = [
   { group: 'People', key: 'people', label: 'Directory', hint: 'The people list and the organisation chart', roles: ['owner', 'hr', 'payroll', 'accountant'] },
@@ -53,6 +54,10 @@ export const LADDER: Array<{ key: string; name: string; rank: number; scope: 'co
 
 @Injectable()
 export class AccessService {
+  private readonly grantsCache = new TtlCache<Array<{ feature: string; subjectKind: string; subjectId: string }>>(60_000);
+  private readonly ladderCache = new TtlCache<Array<{ key: string; name: string; rank: number; scope: string }>>(60_000);
+  private readonly placeCache = new TtlCache<{ departmentId: string; levelId: string }>(30_000);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async keys(session: SessionUser): Promise<string[]> {
@@ -151,6 +156,7 @@ export class AccessService {
         });
       }
     }
+    this.forgetAccess(session.companyId);
     return this.panel(session, person.id);
   }
 
@@ -171,16 +177,18 @@ export class AccessService {
   }
 
   async ensureLadder(companyId: string) {
-    const rows = await this.prisma.companyRole.findMany({ where: { companyId }, select: { key: true } });
-    const have = new Set(rows.map((row) => row.key));
-    const missing = LADDER.filter((role) => !have.has(role.key));
-    if (missing.length) {
-      await this.prisma.companyRole.createMany({
-        data: missing.map((role) => ({ companyId, ...role })),
-        skipDuplicates: true,
-      });
-    }
-    return this.prisma.companyRole.findMany({ where: { companyId }, orderBy: { rank: 'desc' } });
+    return this.ladderCache.remember(companyId, async () => {
+      const rows = await this.prisma.companyRole.findMany({ where: { companyId }, select: { key: true } });
+      const have = new Set(rows.map((row) => row.key));
+      const missing = LADDER.filter((role) => !have.has(role.key));
+      if (missing.length) {
+        await this.prisma.companyRole.createMany({
+          data: missing.map((role) => ({ companyId, ...role })),
+          skipDuplicates: true,
+        });
+      }
+      return this.prisma.companyRole.findMany({ where: { companyId }, orderBy: { rank: 'desc' } });
+    });
   }
 
   async addRole(session: SessionUser, body: unknown) {
@@ -195,6 +203,7 @@ export class AccessService {
     if (ladder.some((role) => role.key === key)) fail(409, 'That role is already on the ladder.');
     const next = ladder.filter((role) => role.key !== 'owner').reduce((low, role) => Math.min(low, role.rank), 100);
     await this.prisma.companyRole.create({ data: { companyId: session.companyId, key, name, rank: Math.max(11, next - 1), scope } });
+    this.forgetAccess(session.companyId);
     return this.ensureLadder(session.companyId);
   }
 
@@ -273,35 +282,38 @@ export class AccessService {
     await this.prisma.accessGrant.createMany({
       data: [...next.values()].map((grant) => ({ companyId: session.companyId, ...grant })),
     });
+    this.forgetAccess(session.companyId);
     return this.view(session);
   }
 
   private async ready(companyId: string) {
-    const rows = await this.prisma.accessGrant.findMany({ where: { companyId } });
-    const have = new Set(rows.map((row) => row.feature));
-    const missing = FEATURES.filter((feature) => !have.has(feature.key));
-    const leadReady = rows.some((row) => row.subjectKind === 'role' && row.subjectId === 'team-lead');
-    if (missing.length || !leadReady) {
-      const data = [
-        ...missing.flatMap((feature) => feature.roles.map((role) => ({
-          companyId,
-          feature: feature.key,
-          subjectKind: 'role',
-          subjectId: role,
-        }))),
-        ...(!leadReady ? ['approvals', 'exceptions'].map((feature) => ({
-          companyId,
-          feature,
-          subjectKind: 'role',
-          subjectId: 'team-lead',
-        })) : []),
-      ];
-      if (data.length) {
-        await this.prisma.accessGrant.createMany({ data, skipDuplicates: true });
-        return this.prisma.accessGrant.findMany({ where: { companyId } });
+    return this.grantsCache.remember(companyId, async () => {
+      const rows = await this.prisma.accessGrant.findMany({ where: { companyId } });
+      const have = new Set(rows.map((row) => row.feature));
+      const missing = FEATURES.filter((feature) => !have.has(feature.key));
+      const leadReady = rows.some((row) => row.subjectKind === 'role' && row.subjectId === 'team-lead');
+      if (missing.length || !leadReady) {
+        const data = [
+          ...missing.flatMap((feature) => feature.roles.map((role) => ({
+            companyId,
+            feature: feature.key,
+            subjectKind: 'role',
+            subjectId: role,
+          }))),
+          ...(!leadReady ? ['approvals', 'exceptions'].map((feature) => ({
+            companyId,
+            feature,
+            subjectKind: 'role',
+            subjectId: 'team-lead',
+          })) : []),
+        ];
+        if (data.length) {
+          await this.prisma.accessGrant.createMany({ data, skipDuplicates: true });
+          return this.prisma.accessGrant.findMany({ where: { companyId } });
+        }
       }
-    }
-    return rows;
+      return rows;
+    });
   }
 
   private async roleScope(companyId: string, key: string): Promise<'company' | 'team'> {
@@ -329,8 +341,16 @@ export class AccessService {
 
   private async place(session: SessionUser): Promise<{ departmentId: string; levelId: string }> {
     if (!session.employeeId) return { departmentId: '', levelId: '' };
-    const row = await this.prisma.employee.findFirst({ where: { id: session.employeeId, companyId: session.companyId }, select: { departmentId: true, levelId: true } });
-    return { departmentId: row?.departmentId || '', levelId: row?.levelId || '' };
+    return this.placeCache.remember(session.employeeId, async () => {
+      const row = await this.prisma.employee.findFirst({ where: { id: session.employeeId!, companyId: session.companyId }, select: { departmentId: true, levelId: true } });
+      return { departmentId: row?.departmentId || '', levelId: row?.levelId || '' };
+    });
+  }
+
+  /** Drop cached access reads after Access settings change. */
+  forgetAccess(companyId: string): void {
+    this.grantsCache.delete(companyId);
+    this.ladderCache.delete(companyId);
   }
 
   private roleLabel(role: string): string {

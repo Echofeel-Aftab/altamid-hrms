@@ -34,6 +34,7 @@ import { SessionUser } from './session';
 import { accountReady, AiSettings, defaultAiSettings } from './ai.types';
 import { presentAiSettings, readAiSettings, removeAiAccount, setDefaultAiAccount, upsertAiAccount } from './ai-settings';
 import { pingAccount, ProviderAccount } from './ai-providers';
+import { TtlCache } from './ttl-cache';
 
 const SEQUENCE_TYPES = ['employee', 'payslip', 'leave', 'reimbursement', 'loan'] as const;
 type SequenceType = (typeof SEQUENCE_TYPES)[number];
@@ -260,6 +261,7 @@ function clip(value: unknown, max: number, fallback = ''): string {
 @Injectable()
 export class SettingsService {
   private readonly key = dataKey();
+  private readonly settingsCache = new TtlCache<StoredSettings>(30_000);
 
   constructor(private readonly prisma: PrismaService, private readonly gates: AccessService, private readonly brand: BrandService) {}
 
@@ -483,17 +485,23 @@ export class SettingsService {
   }
 
   private async load(companyId: string): Promise<StoredSettings> {
+    const hit = this.settingsCache.get(companyId);
+    if (hit) return structuredClone(hit);
     const rows = await this.prisma.$queryRaw<Array<{ settingsJson: string }>>`
       SELECT "settingsJson" FROM "Company" WHERE "id" = ${companyId}
     `;
     const base = defaults();
     const raw = rows[0]?.settingsJson || '';
-    if (!raw) return base;
+    if (!raw) {
+      this.settingsCache.set(companyId, base);
+      return structuredClone(base);
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return base;
+      this.settingsCache.set(companyId, base);
+      return structuredClone(base);
     }
     const source = asRecord(parsed);
     const profile = asRecord(source.profile);
@@ -574,7 +582,8 @@ export class SettingsService {
       if (!note.message) continue;
       base.tests[key] = { ok: note.ok === true, message: clip(note.message, 240), at: clip(note.at, 40) };
     }
-    return base;
+    this.settingsCache.set(companyId, base);
+    return structuredClone(base);
   }
 
   private readAccount(row: Record<string, unknown>): SalaryAccount {
@@ -687,6 +696,7 @@ export class SettingsService {
     await this.prisma.$executeRaw`
       UPDATE "Company" SET "settingsJson" = ${json}, "updatedAt" = NOW() WHERE "id" = ${companyId}
     `;
+    this.settingsCache.set(companyId, structuredClone(stored));
   }
 
   private async saveProfile(session: SessionUser, input: Record<string, unknown>, stored: StoredSettings): Promise<void> {

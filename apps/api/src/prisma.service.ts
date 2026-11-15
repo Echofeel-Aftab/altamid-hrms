@@ -81,11 +81,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return extended as unknown as PrismaService;
   }
 
+  private keepAlive: ReturnType<typeof setInterval> | null = null;
+
   async onModuleInit(): Promise<void> {
     await this.$connect();
+    // Neon can suspend idle compute; a light ping keeps page loads from waiting on a cold start.
+    this.keepAlive = setInterval(() => {
+      this.$queryRaw`SELECT 1`.catch(() => undefined);
+    }, 4 * 60 * 1000);
+    if (typeof this.keepAlive.unref === 'function') this.keepAlive.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.keepAlive) clearInterval(this.keepAlive);
     await this.$disconnect();
   }
 }

@@ -70,6 +70,9 @@ export class LoginComponent {
     try {
       const result = await this.api.post<{ token: string }>('/v1/auth/login', { email: this.email, password: this.password });
       this.api.setToken(result.token);
+      // Warm the first screen while navigation starts (shared with auth guard / Home via ApiService cache).
+      void this.api.get('/v1/me');
+      void this.api.get('/v1/home');
       await this.router.navigateByUrl('/');
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Sign-in failed.';

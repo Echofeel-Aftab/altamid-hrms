@@ -45,7 +45,7 @@ export class WorkplaceService {
     const show = (key: string) => blocks.find((item) => item.key === key)?.visible === true;
     const month = today.slice(0, 7);
     const previous = shiftDay(month + '-01', -1).slice(0, 7);
-    const [announcements, leave, attendance, people, pending, monthView, joiners, jobs, celebrations] = await Promise.all([
+    const [announcements, leave, attendance, people, pending, monthView, joiners, jobs, celebrations, extra] = await Promise.all([
       show('announcements') ? this.announcements(session) : Promise.resolve([]),
       show('leave') && session.employeeId ? this.balances(session.companyId, session.employeeId, today.slice(0, 4)) : Promise.resolve([]),
       show('punch') && session.employeeId ? this.myPunch(session) : Promise.resolve(null),
@@ -64,8 +64,8 @@ export class WorkplaceService {
         take: 6,
       }) : Promise.resolve([]),
       show('celebrations') ? this.celebrations(session) : Promise.resolve({ mailbox: false, note: '', items: [], welcomed: [] as string[] }),
+      this.homeBoard.build(session, show),
     ]);
-    const extra = await this.homeBoard.build(session, show);
     const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
     const greeting = hour < 5 ? 'Hello' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     const days = monthView?.days || [];

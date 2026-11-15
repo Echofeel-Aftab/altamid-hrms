@@ -50,15 +50,22 @@ export class HomeBoardService {
   constructor(private readonly prisma: PrismaService, private readonly gates: AccessService, private readonly settings: SettingsService) {}
 
   async build(session: SessionUser, show: (key: string) => boolean) {
+    const features = ['people', 'people.edit', 'pay', 'hiring', 'assets'] as const;
+    const held = new Map<string, boolean>();
+    await Promise.all(features.map(async (feature) => held.set(feature, await this.gates.holds(session, feature))));
     const want = async <T>(key: string, feature: string | null, work: () => Promise<T>): Promise<T | null> => {
       if (!show(key)) return null;
-      if (feature && !(await this.gates.holds(session, feature))) return null;
+      if (feature && !held.get(feature)) return null;
       return work();
     };
     const today = todayInIndia();
+    const needFacts = show('team-today') || (show('company-today') && !!held.get('people'));
+    const factsPromise = needFacts
+      ? this.dayFacts(session.companyId, today)
+      : Promise.resolve({ holiday: '', weekOff: false, working: true });
     const [teamToday, companyToday, peopleWatch, payrollDesk, hiringDesk, assetsDesk, myAssets, myPay, myRequests, holidays] = await Promise.all([
-      want('team-today', null, () => this.teamToday(session, today)),
-      want('company-today', 'people', () => this.companyToday(session, today)),
+      want('team-today', null, () => factsPromise.then((facts) => this.teamToday(session, today, facts))),
+      want('company-today', 'people', () => factsPromise.then((facts) => this.companyToday(session, today, facts))),
       want('people-watch', 'people.edit', () => this.peopleWatch(session, today)),
       want('payroll-desk', 'pay', () => this.payrollDesk(session, today)),
       want('hiring-desk', 'hiring', () => this.hiringDesk(session)),
@@ -98,7 +105,7 @@ export class HomeBoardService {
     return { first, last, onLeave, away };
   }
 
-  private async teamToday(session: SessionUser, today: string) {
+  private async teamToday(session: SessionUser, today: string, facts: Awaited<ReturnType<HomeBoardService['dayFacts']>>) {
     if (!session.employeeId) return null;
     const people = await this.prisma.employee.findMany({
       where: { companyId: session.companyId, status: { in: ACTIVE }, id: { not: session.employeeId }, OR: [{ managerId: session.employeeId }, { team: { leadId: session.employeeId } }] },
@@ -106,7 +113,6 @@ export class HomeBoardService {
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });
     if (!people.length) return null;
-    const facts = await this.dayFacts(session.companyId, today);
     const { first, last, onLeave, away } = await this.todayStates(session.companyId, people.map((row) => row.id), today);
     const rows = people.map((person) => {
       const arrived = first.get(person.id);
@@ -141,9 +147,8 @@ export class HomeBoardService {
     };
   }
 
-  private async companyToday(session: SessionUser, today: string) {
+  private async companyToday(session: SessionUser, today: string, facts: Awaited<ReturnType<HomeBoardService['dayFacts']>>) {
     const people = await this.prisma.employee.findMany({ where: { companyId: session.companyId, status: { in: ACTIVE }, dateOfJoining: { lte: today } }, select: { id: true, status: true } });
-    const facts = await this.dayFacts(session.companyId, today);
     const { first, onLeave, away } = await this.todayStates(session.companyId, people.map((row) => row.id), today);
     const present = people.filter((row) => first.has(row.id)).length;
     const elsewhere = people.filter((row) => !first.has(row.id) && away.has(row.id)).length;
@@ -197,7 +202,11 @@ export class HomeBoardService {
       this.prisma.payMonth.findMany({ where: { companyId: session.companyId, month: { in: [month, previous] } }, select: { month: true } }),
       this.prisma.paySlip.findMany({ where: { companyId: session.companyId, month: previous }, select: { published: true } }),
     ]);
-    const missingBank = people.filter((row) => !openSecret(row.bankEnc, this.key) || !openSecret(row.ifscEnc, this.key)).length;
+    // Empty ciphertext means missing bank; only decrypt when a value is stored.
+    const missingBank = people.filter((row) => {
+      if (!row.bankEnc || !row.ifscEnc) return true;
+      return !openSecret(row.bankEnc, this.key) || !openSecret(row.ifscEnc, this.key);
+    }).length;
     return {
       month,
       label: monthLabel(month),
