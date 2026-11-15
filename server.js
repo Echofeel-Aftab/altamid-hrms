@@ -1,17 +1,10 @@
 /**
- * Hostinger Nest entry (must be .js). Boots the built HRMS API.
+ * Hostinger Nest entry (must be .js).
+ * Loads the built HRMS API in-process so Hostinger sees listen() on this PID
+ * (spawning a child caused "App did not call listen() within 3 seconds" / 504).
  */
-const { spawn } = require('child_process');
 const { join } = require('path');
 
 const apiDir = join(__dirname, 'apps', 'api');
-const child = spawn(process.execPath, ['dist/main.js'], {
-  cwd: apiDir,
-  stdio: 'inherit',
-  env: process.env,
-});
-
-child.on('exit', (code, signal) => {
-  if (signal) process.kill(process.pid, signal);
-  process.exit(code == null ? 1 : code);
-});
+process.chdir(apiDir);
+require(join(apiDir, 'dist', 'main.js'));
