@@ -28,13 +28,15 @@ export interface ResolvedBlock {
 export class HomeLayoutService {
   constructor(private readonly prisma: PrismaService, private readonly gates: AccessService) {}
 
-  /** The blocks this sign-in sees on Home, after layouts, Access, and their own choice. */
-  async resolve(session: SessionUser): Promise<ResolvedBlock[]> {
-    await this.ensure(session.companyId);
-    const person = session.employeeId
-      ? await this.prisma.employee.findFirst({ where: { id: session.employeeId, companyId: session.companyId }, select: { id: true, departmentId: true } })
-      : null;
-    const rows = await this.prisma.homeLayout.findMany({ where: { companyId: session.companyId } });
+  /** Blocks, column count, and whether this person saved a personal arrangement — one DB pass for Home. */
+  async resolveHome(session: SessionUser): Promise<{ blocks: ResolvedBlock[]; columns: HomeColumns; personal: boolean }> {
+    const [, person, rows] = await Promise.all([
+      this.ensure(session.companyId),
+      session.employeeId
+        ? this.prisma.employee.findFirst({ where: { id: session.employeeId, companyId: session.companyId }, select: { id: true, departmentId: true } })
+        : Promise.resolve(null),
+      this.prisma.homeLayout.findMany({ where: { companyId: session.companyId } }),
+    ]);
     const find = (kind: string, id: string) => blockSettings(rows.find((row) => row.subjectKind === kind && row.subjectId === id)?.blocksJson || '{}');
     const chain = [
       person ? find('person', person.id) : {},
@@ -42,7 +44,8 @@ export class HomeLayoutService {
       find('role', session.role),
       find('company', ''),
     ];
-    const mineRaw = rows.find((row) => row.subjectKind === 'user' && row.subjectId === session.id)?.blocksJson || '{}';
+    const mineRow = rows.find((row) => row.subjectKind === 'user' && row.subjectId === session.id);
+    const mineRaw = mineRow?.blocksJson || '{}';
     const mine = blockSettings(mineRaw);
     const arrangement = arrangementOf(mineRaw);
     const allowed = await this.permitted(session, person?.id || '');
@@ -51,7 +54,7 @@ export class HomeLayoutService {
       const base = HOME_ORDER.indexOf(key);
       return own >= 0 ? own : arrangement.order.length + (base >= 0 ? base : HOME_ORDER.length);
     };
-    return HOME_BLOCKS.map((block) => {
+    const blocks = HOME_BLOCKS.map((block) => {
       const setting = chain.find((layer) => layer[block.key])?.[block.key] || 'on';
       const available = setting === 'on' && allowed(block);
       const hiddenByMe = mine[block.key] === 'off';
@@ -68,6 +71,12 @@ export class HomeLayoutService {
         sizes: sizesOf(block.key),
       };
     }).sort((left, right) => place(left.key) - place(right.key));
+    return { blocks, columns: columnsOf(mineRaw), personal: Boolean(mineRow) };
+  }
+
+  /** The blocks this sign-in sees on Home, after layouts, Access, and their own choice. */
+  async resolve(session: SessionUser): Promise<ResolvedBlock[]> {
+    return (await this.resolveHome(session)).blocks;
   }
 
   /**

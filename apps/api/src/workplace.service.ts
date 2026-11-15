@@ -28,13 +28,12 @@ export class WorkplaceService {
 
   async home(session: SessionUser) {
     const today = todayInIndia();
-    const [blocks, columns, directoryOn, jobsOn, personal] = await Promise.all([
-      this.layouts.resolve(session),
-      this.layouts.columns(session),
+    const [layout, directoryOn, jobsOn] = await Promise.all([
+      this.layouts.resolveHome(session),
       this.library.allowsKey(session, 'directory'),
       this.library.allowsKey(session, 'jobs'),
-      this.prisma.homeLayout.count({ where: { companyId: session.companyId, subjectKind: 'user', subjectId: session.id } }),
     ]);
+    const { blocks, columns, personal } = layout;
     for (const block of blocks) {
       if ((block.key === 'directory' && !directoryOn) || (block.key === 'jobs' && !jobsOn)) {
         block.available = false;

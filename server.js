@@ -7,7 +7,7 @@ const { join } = require('path');
 
 // Long-lived Node app on Hostinger + Neon pooler: keep a small Prisma pool.
 if (process.env.DATABASE_URL && !/[?&]connection_limit=/.test(process.env.DATABASE_URL)) {
-  process.env.DATABASE_URL += (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=5&pool_timeout=20';
+  process.env.DATABASE_URL += (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=15&pool_timeout=20';
 }
 
 const apiDir = join(__dirname, 'apps', 'api');
