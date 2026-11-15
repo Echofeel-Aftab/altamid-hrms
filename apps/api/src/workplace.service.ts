@@ -13,9 +13,12 @@ import { HomeLayoutService } from './home-layout.service';
 import { SessionUser } from './session';
 import { advanceFlow, buildFlow, FlowKind, FlowStep, mayWaitOn, parseFlow, stageOf, waitsOn } from './approval-flow';
 import { notifyPerson } from './people-kit';
+import { TtlCache } from './ttl-cache';
 
 @Injectable()
 export class WorkplaceService {
+  private readonly homeCache = new TtlCache<Record<string, unknown>>(4_000, 100);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly library: LibraryService,
@@ -27,6 +30,11 @@ export class WorkplaceService {
   ) {}
 
   async home(session: SessionUser) {
+    const cacheKey = `${session.companyId}:${session.id}:${session.outletId || ''}`;
+    return this.homeCache.remember(cacheKey, () => this.buildHome(session));
+  }
+
+  private async buildHome(session: SessionUser) {
     const today = todayInIndia();
     const [layout, directoryOn, jobsOn] = await Promise.all([
       this.layouts.resolveHome(session),
@@ -74,7 +82,7 @@ export class WorkplaceService {
       widgets,
       blocks,
       columns,
-      personal: personal > 0,
+      personal,
       ...extra,
       announcements: announcements.slice(0, 4),
       leave,
