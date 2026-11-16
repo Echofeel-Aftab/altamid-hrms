@@ -473,10 +473,28 @@ export class ApplicationComponent implements OnInit {
   }
 
   private async load(id: string): Promise<void> {
-    if (!id) return;
+    if (!id) {
+      this.row = null;
+      this.error = 'That application link is missing an id.';
+      return;
+    }
     this.error = '';
+    this.row = null;
     try {
-      this.row = await this.api.get<Detail>('/v1/hiring/applications/' + encodeURIComponent(id));
+      const row = await this.api.get<Detail>('/v1/hiring/applications/' + encodeURIComponent(id));
+      row.repeat = row.repeat || { applications: [], employees: [] };
+      row.repeat.applications = row.repeat.applications || [];
+      row.repeat.employees = row.repeat.employees || [];
+      row.match = row.match || { score: null, reason: '', components: [], points: [], matched: [], missing: [] };
+      row.match.components = row.match.components || [];
+      row.match.points = row.match.points || [];
+      row.highlights = row.highlights || { resume: [], message: [] };
+      row.highlights.resume = row.highlights.resume || [];
+      row.highlights.message = row.highlights.message || [];
+      row.history = row.history || [];
+      row.answers = row.answers || [];
+      row.rules = row.rules || { rejectDays: 0, exitDays: 0 };
+      this.row = row;
       this.draftStatus = this.row.status;
       this.draftNote = this.row.note || '';
     } catch (error) {

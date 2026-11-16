@@ -109,7 +109,7 @@ export class RowActionsDirective<T> {
                     </button>
                   </th>
                 }
-                @if (actions) { <th>Actions</th> }
+                @if (actions) { <th class="dt-actions">Actions</th> }
               </tr>
             </thead>
             <tbody>
@@ -136,7 +136,7 @@ export class RowActionsDirective<T> {
                     </td>
                   }
                   @if (actions) {
-                    <td><div class="row-actions"><ng-container [ngTemplateOutlet]="actions.template" [ngTemplateOutletContext]="{ $implicit: row }" /></div></td>
+                    <td class="dt-actions"><div class="row-actions"><ng-container [ngTemplateOutlet]="actions.template" [ngTemplateOutletContext]="{ $implicit: row }" /></div></td>
                   }
                 </tr>
               }

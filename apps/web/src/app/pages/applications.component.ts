@@ -95,7 +95,7 @@ export function scoreLabel(score: number | null | undefined): string {
         </select>
       </div>
       <ng-template appRowActions let-item>
-        <a class="btn btn-sm" [routerLink]="'/hiring/applications/' + item.id"><i class="bi bi-person-vcard"></i> Details</a>
+        <a class="btn btn-sm" [routerLink]="['/hiring/applications', item.id]"><i class="bi bi-person-vcard"></i> Details</a>
       </ng-template>
     </app-data-table>
 
