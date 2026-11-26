@@ -5,6 +5,7 @@ import { bag, emailOf, fail, optional, text } from './http';
 import { AccessService } from './access.service';
 import { DirectoryService } from './directory.service';
 import { ApplicantService, emailKey, highlight, nameKey, phoneKey, prettyDay, sharedPhones } from './applicant.service';
+import { LicenceService } from './licence.service';
 import { unscoped } from './outlet-context';
 import { PrismaService } from './prisma.service';
 import { plainOf, richOf } from './rich';
@@ -68,7 +69,13 @@ export interface InboundApplication {
 
 @Injectable()
 export class HiringService {
-  constructor(private readonly prisma: PrismaService, private readonly gates: AccessService, private readonly applicants: ApplicantService, private readonly directory: DirectoryService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gates: AccessService,
+    private readonly applicants: ApplicantService,
+    private readonly directory: DirectoryService,
+    private readonly licence: LicenceService,
+  ) {}
 
   async list(session: SessionUser) {
     await this.requireHr(session);
@@ -432,6 +439,7 @@ export class HiringService {
   }
 
   async internalBoard(session: SessionUser) {
+    await this.licence.assertFeature(session.companyId, 'hiring');
     const rows = await this.prisma.opening.findMany({
       where: { companyId: session.companyId, status: 'open', OR: [{ internal: true }, { referral: true }] },
       orderBy: { title: 'asc' },

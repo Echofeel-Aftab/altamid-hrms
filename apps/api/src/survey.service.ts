@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AccessService } from './access.service';
 import { todayInIndia } from './dates';
 import { bag, fail, optional, text } from './http';
+import { LicenceService } from './licence.service';
 import { notifyPerson } from './people-kit';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
@@ -19,9 +20,11 @@ export class SurveyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gates: AccessService,
+    private readonly licence: LicenceService,
   ) {}
 
   async list(session: SessionUser) {
+    await this.licence.assertFeature(session.companyId, 'surveys');
     const canRun = await this.gates.holds(session, 'surveys');
     const me = session.employeeId ? await this.prisma.employee.findFirst({ where: { id: session.employeeId, companyId: session.companyId }, select: { departmentId: true } }) : null;
     const open = await this.prisma.survey.findMany({ where: { companyId: session.companyId, status: 'open' }, orderBy: { createdAt: 'desc' } });

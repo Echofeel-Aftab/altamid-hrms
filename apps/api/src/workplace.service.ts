@@ -15,6 +15,23 @@ import { advanceFlow, buildFlow, FlowKind, FlowStep, mayWaitOn, parseFlow, stage
 import { notifyPerson } from './people-kit';
 import { TtlCache } from './ttl-cache';
 
+/** Extra leave types companies can one-click add when missing (codes must stay unique). */
+const LEAVE_PACK: Array<{
+  name: string;
+  code: string;
+  paid: boolean;
+  daysPerYear: number;
+  maxInRow?: number;
+  noticeDays?: number;
+  compOff?: boolean;
+}> = [
+  { name: 'Comp-off', code: 'CO', paid: true, daysPerYear: 0, compOff: true },
+  { name: 'Maternity leave', code: 'ML', paid: true, daysPerYear: 182, maxInRow: 182, noticeDays: 30 },
+  { name: 'Paternity leave', code: 'PT', paid: true, daysPerYear: 15, maxInRow: 15, noticeDays: 7 },
+  { name: 'Bereavement leave', code: 'BL', paid: true, daysPerYear: 5, maxInRow: 5 },
+  { name: 'Optional leave', code: 'OL', paid: true, daysPerYear: 2, maxInRow: 1 },
+];
+
 @Injectable()
 export class WorkplaceService {
   private readonly homeCache = new TtlCache<Record<string, unknown>>(4_000, 100);
@@ -370,7 +387,7 @@ export class WorkplaceService {
       where: {
         companyId: session.companyId,
         active: true,
-        ...(homeOutletId ? { outletId: homeOutletId } : {}),
+        ...(homeOutletId ? { OR: [{ outletId: homeOutletId }, { outletId: null }] } : {}),
       },
       orderBy: { name: 'asc' },
     });
@@ -752,7 +769,11 @@ export class WorkplaceService {
       employeeId
         ? this.balances(session.companyId, employeeId, todayInIndia().slice(0, 4))
         : this.leavePickerOutlet(session).then((homeOutletId) => this.prisma.leaveType.findMany({
-          where: { companyId: session.companyId, active: true, ...(homeOutletId ? { outletId: homeOutletId } : {}) },
+          where: {
+            companyId: session.companyId,
+            active: true,
+            ...(homeOutletId ? { OR: [{ outletId: homeOutletId }, { outletId: null }] } : {}),
+          },
           orderBy: { name: 'asc' },
         }).then((rows) => this.uniqueLeaveTypes(rows.map((row) => ({
           id: row.id, name: row.name, code: row.code, paid: row.paid, entitled: row.daysPerYear, quota: row.daysPerYear, carried: 0, earned: 0, used: 0, left: Math.max(0, row.daysPerYear), limited: row.daysPerYear > 0,
@@ -1205,7 +1226,15 @@ export class WorkplaceService {
       this.settings.policy(session.companyId),
     ]);
     return {
-      policy: { prorateLeave: policy.prorateLeave, compOffFullHours: policy.compOffFullHours, compOffHalfHours: policy.compOffHalfHours },
+      policy: {
+        prorateLeave: policy.prorateLeave,
+        compOffFullHours: policy.compOffFullHours,
+        compOffHalfHours: policy.compOffHalfHours,
+        holidayWorkEarnsCompOff: policy.holidayWorkEarnsCompOff,
+        holidayWorkCompOffDays: policy.holidayWorkCompOffDays,
+        holidayWorkPayMultiplier: policy.holidayWorkPayMultiplier,
+      },
+      packMissing: LEAVE_PACK.filter((item) => !rows.some((row) => row.code.toUpperCase() === item.code)).map((item) => item.code),
       items: rows.map((row) => ({
         id: row.id,
         name: row.name,
@@ -1221,6 +1250,35 @@ export class WorkplaceService {
         requests: used.find((item) => item.leaveTypeId === row.id)?._count._all || 0,
       })),
     };
+  }
+
+  /** Adds Comp-off, Maternity, Paternity, Bereavement, Optional leave when those codes are missing. */
+  async addLeavePack(session: SessionUser) {
+    if (!(await this.gates.holds(session, 'settings')) && !(await this.gates.holds(session, 'attendance'))) {
+      fail(403, 'You do not have access to leave types.');
+    }
+    const existing = await this.prisma.leaveType.findMany({
+      where: { companyId: session.companyId },
+      select: { code: true },
+    });
+    const have = new Set(existing.map((row) => row.code.toUpperCase()));
+    const missing = LEAVE_PACK.filter((item) => !have.has(item.code));
+    if (missing.length) {
+      await this.prisma.leaveType.createMany({
+        data: missing.map((item) => ({ companyId: session.companyId, ...item })),
+      });
+      await this.prisma.auditEvent.create({
+        data: {
+          companyId: session.companyId,
+          actorId: session.id,
+          action: 'leave-type.pack',
+          entity: 'leave-type',
+          entityId: session.companyId,
+          detail: missing.map((item) => item.code).join(', '),
+        },
+      });
+    }
+    return this.leaveTypes(session);
   }
 
   async saveLeaveType(session: SessionUser, body: unknown) {

@@ -11,8 +11,23 @@ const KINDS = ['fingerprint', 'face', 'card'] as const;
 export class DeviceService {
   constructor(private readonly prisma: PrismaService, private readonly gates: AccessService) {}
 
+  private badgeReady: Promise<void> | null = null;
+
+  private ensureBadgeColumn(): Promise<void> {
+    if (!this.badgeReady) {
+      this.badgeReady = (async () => {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "deviceCode" TEXT`);
+        await this.prisma.$executeRawUnsafe(
+          `CREATE UNIQUE INDEX IF NOT EXISTS "Employee_companyId_deviceCode_key" ON "Employee"("companyId", "deviceCode")`,
+        ).catch(() => undefined);
+      })();
+    }
+    return this.badgeReady;
+  }
+
   async list(session: SessionUser) {
     await this.requireHr(session);
+    await this.ensureBadgeColumn();
     const rows = await this.prisma.attendanceDevice.findMany({ where: { companyId: session.companyId }, orderBy: { name: 'asc' } });
     return rows.map((row) => this.present(row));
   }
@@ -65,6 +80,7 @@ export class DeviceService {
   }
 
   async ingest(token: string, body: unknown) {
+    await this.ensureBadgeColumn();
     const device = await this.prisma.attendanceDevice.findUnique({ where: { token } });
     if (!device || !device.active) fail(401, 'This reader is not connected.');
     const input = body && typeof body === 'object' ? body as Record<string, unknown> : {};
@@ -83,10 +99,10 @@ export class DeviceService {
 
   private async one(device: { id: string; companyId: string; name: string }, row: unknown): Promise<{ ok: true } | { ok: false; code: string; reason: string }> {
     const input = row && typeof row === 'object' ? row as Record<string, unknown> : {};
-    const code = String(input.code || input.userId || input.empCode || '').trim();
-    if (!code) return { ok: false, code: '', reason: 'Employee code is required.' };
-    const person = await this.prisma.employee.findFirst({ where: { companyId: device.companyId, code: { equals: code, mode: 'insensitive' } } });
-    if (!person) return { ok: false, code, reason: 'No person uses that code.' };
+    const code = String(input.code || input.userId || input.empCode || input.badgeId || input.deviceCode || '').trim();
+    if (!code) return { ok: false, code: '', reason: 'Employee code or biometric / badge ID is required.' };
+    const person = await this.findPerson(device.companyId, code);
+    if (!person) return { ok: false, code, reason: 'No person uses that biometric / badge ID or employee code.' };
     if (person.status === 'exited') return { ok: false, code, reason: 'That person has left.' };
     const kind = this.kindOf(String(input.kind || input.status || ''));
     const resolved = kind || await this.infer(device.companyId, person.id);
@@ -139,14 +155,29 @@ export class DeviceService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  private async findPerson(companyId: string, code: string) {
+    const badge = await this.prisma.employee.findFirst({
+      where: { companyId, deviceCode: { equals: code, mode: 'insensitive' } },
+    });
+    if (badge) return badge;
+    return this.prisma.employee.findFirst({
+      where: { companyId, code: { equals: code, mode: 'insensitive' } },
+    });
+  }
+
   private present(row: { id: string; name: string; kind: string; location: string; token: string; active: boolean; lastSeenAt: Date | null }) {
+    const path = '/v1/devices/' + row.token + '/punches';
+    const origin = (process.env.PUBLIC_API_URL || process.env.APP_URL || '').replace(/\/$/, '');
     return {
       id: row.id,
       name: row.name,
       kind: row.kind,
       location: row.location,
       active: row.active,
-      path: '/v1/devices/' + row.token + '/punches',
+      path,
+      url: origin ? origin + path : path,
+      sample: '{ "code": "EMP005", "kind": "in", "at": "2026-11-27T09:32:00+05:30" }',
+      hint: 'Point the vendor software or a bridge PC at this URL. Map the machine user id to Biometric / badge ID on the person (or use the EMP code). Altamid does not store fingerprints or faces.',
       lastSeen: row.lastSeenAt ? row.lastSeenAt.toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : '',
     };
   }

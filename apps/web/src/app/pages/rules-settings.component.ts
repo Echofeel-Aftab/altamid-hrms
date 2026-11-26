@@ -9,6 +9,9 @@ interface Policy {
   prorateLeave: boolean;
   compOffFullHours: number;
   compOffHalfHours: number;
+  holidayWorkEarnsCompOff: boolean;
+  holidayWorkCompOffDays: number;
+  holidayWorkPayMultiplier: number;
   autoExit: boolean;
   monthlyAccrual: boolean;
   reminders: {
@@ -122,6 +125,29 @@ const blankType = (): LeaveType => ({
               <div>
                 <label for="rule-half">Comp-off: hours for a half day</label>
                 <input id="rule-half" name="compOffHalfHours" type="number" min="1" max="12" [(ngModel)]="policy.compOffHalfHours">
+              </div>
+            </div>
+            <h3 class="rule-sub">Holiday work</h3>
+            <label class="check">
+              <input type="checkbox" name="holidayWorkEarnsCompOff" [(ngModel)]="policy.holidayWorkEarnsCompOff">
+              <span><strong>Holiday work earns comp-off</strong><small>Approved extra time on a company holiday credits fixed comp-off days instead of the hour thresholds above.</small></span>
+            </label>
+            <div class="field-grid">
+              <div>
+                <label for="rule-hol-days">Comp-off days per holiday worked</label>
+                <select id="rule-hol-days" name="holidayWorkCompOffDays" [(ngModel)]="policy.holidayWorkCompOffDays">
+                  <option [ngValue]="0.5">Half day (0.5)</option>
+                  <option [ngValue]="1">Full day (1)</option>
+                </select>
+              </div>
+              <div>
+                <label for="rule-hol-pay">Holiday pay multiplier (payroll hint)</label>
+                <select id="rule-hol-pay" name="holidayWorkPayMultiplier" [(ngModel)]="policy.holidayWorkPayMultiplier">
+                  <option [ngValue]="1">1× (normal)</option>
+                  <option [ngValue]="1.5">1.5×</option>
+                  <option [ngValue]="2">2× (double)</option>
+                </select>
+                <p class="field-hint">Shown on the payroll month as a reminder. Slips stay manual.</p>
               </div>
             </div>
             <label class="check">
@@ -292,6 +318,14 @@ const blankType = (): LeaveType => ({
             </div>
           </header>
           <div class="settings-card-body">
+            @if (packMissing.length) {
+              <p class="muted">Missing from the common pack: {{ packMissing.join(', ') }}.</p>
+              <div class="settings-inline-save" style="margin-bottom: 12px">
+                <button type="button" class="btn btn-secondary" (click)="addPack()" [disabled]="busy">
+                  <i class="bi bi-collection"></i> Add missing leave types
+                </button>
+              </div>
+            }
             <div class="rule-types">
               @for (item of types; track item.id) {
                 <button type="button" class="rule-type" [class.is-active]="draft.id === item.id" [class.is-off]="!item.active" (click)="edit(item)">
@@ -361,6 +395,7 @@ export class SettingsRulesComponent implements OnInit {
   checklists: ChecklistDraft[] = [];
   runs: AutomationView['runs'] = [];
   types: LeaveType[] = [];
+  packMissing: string[] = [];
   draft: LeaveType = blankType();
   error = '';
   ok = '';
@@ -370,17 +405,27 @@ export class SettingsRulesComponent implements OnInit {
     try {
       const [view, leave, hiring, onboarding] = await Promise.all([
         this.api.get<AutomationView>('/v1/automation'),
-        this.api.get<{ items: LeaveType[] }>('/v1/leave/types'),
+        this.api.get<{ items: LeaveType[]; packMissing?: string[] }>('/v1/leave/types'),
         this.api.get<HiringRules>('/v1/hiring/rules').catch(() => null),
         this.api.get<OnboardingPack>('/v1/onboarding/templates').catch(() => null),
       ]);
       this.apply(view);
       this.types = leave.items;
+      this.packMissing = leave.packMissing || [];
       this.hiring = hiring;
       this.applyOnboarding(onboarding);
     } catch (error) {
       this.error = this.message(error);
     }
+  }
+
+  async addPack(): Promise<void> {
+    await this.act(async () => {
+      const result = await this.api.post<{ items: LeaveType[]; packMissing?: string[] }>('/v1/leave/types/pack', {});
+      this.types = result.items;
+      this.packMissing = result.packMissing || [];
+      this.ok = this.packMissing.length ? 'Some leave types were added.' : 'Common leave types are ready (comp-off, maternity, paternity, bereavement, optional).';
+    });
   }
 
   edit(item: LeaveType | null): void {
@@ -491,8 +536,9 @@ export class SettingsRulesComponent implements OnInit {
         afterProbation: draft.afterProbation,
         compOff: draft.compOff,
       };
-      const result = await this.api.post<{ items: LeaveType[] }>('/v1/leave/types', body);
+      const result = await this.api.post<{ items: LeaveType[]; packMissing?: string[] }>('/v1/leave/types', body);
       this.types = result.items;
+      this.packMissing = result.packMissing || [];
       const saved = this.types.find((item) => item.code === body.code);
       this.draft = saved ? { ...saved } : blankType();
       this.ok = `${body.name} saved.`;
@@ -505,7 +551,14 @@ export class SettingsRulesComponent implements OnInit {
   }
 
   private apply(view: AutomationView): void {
-    this.policy = { ...view.policy, reminders: { ...view.policy.reminders } };
+    const policy = view.policy;
+    this.policy = {
+      ...policy,
+      holidayWorkEarnsCompOff: policy.holidayWorkEarnsCompOff !== false,
+      holidayWorkCompOffDays: policy.holidayWorkCompOffDays === 0.5 ? 0.5 : 1,
+      holidayWorkPayMultiplier: [1, 1.5, 2].includes(Number(policy.holidayWorkPayMultiplier)) ? Number(policy.holidayWorkPayMultiplier) : 2,
+      reminders: { ...policy.reminders },
+    };
     this.runs = view.runs;
   }
 

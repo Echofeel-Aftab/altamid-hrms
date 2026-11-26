@@ -4,6 +4,7 @@ import { bag, emailOf, fail, optional, text } from './http';
 import { integrationReady } from './integrations';
 import { LeaveLedger } from './leave-ledger.service';
 import { ApplicantService } from './applicant.service';
+import { LicenceService } from './licence.service';
 import { PrismaService } from './prisma.service';
 import { SettingsService } from './settings.service';
 
@@ -14,6 +15,7 @@ export class ExternalApiService {
     private readonly settings: SettingsService,
     private readonly leave: LeaveLedger,
     private readonly applicants: ApplicantService,
+    private readonly licence: LicenceService,
   ) {}
 
   async me(companyId: string) {
@@ -116,6 +118,7 @@ export class ExternalApiService {
   }
 
   async assertApiEnabled(companyId: string): Promise<void> {
+    await this.licence.assertFeature(companyId, 'api');
     const stored = await this.settings.companySettings(companyId);
     const row = stored.integrations.api;
     if (!integrationReady('api', row)) fail(403, 'Company API is disabled or not configured.');

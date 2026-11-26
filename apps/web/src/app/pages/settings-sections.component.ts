@@ -20,6 +20,7 @@ import {
   SmtpAccountView,
   StatutorySettings,
 } from '../core/settings';
+import { DeskPack, deskPack as currentDeskPack, setDeskPack } from '../core/desk-pack';
 import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 import { BrandSettingsComponent } from './brand-settings.component';
 import { SettingsAiComponent } from './settings-ai.component';
@@ -49,7 +50,7 @@ function messageOf(error: unknown): string {
         </button>
         <button type="button" class="settings-toc-item" [class.is-active]="pane === 'appearance'" (click)="pane = 'appearance'">
           <i class="bi bi-palette"></i>
-          <span><strong>Appearance</strong><small>Logo and colours</small></span>
+          <span><strong>Appearance</strong><small>Logo, colours, desk packing</small></span>
         </button>
       </nav>
       <div class="settings-workspace-main">
@@ -178,8 +179,28 @@ function messageOf(error: unknown): string {
         } @else {
           <header class="settings-panel-head">
             <h2><i class="bi bi-palette"></i> Appearance</h2>
-            <p>Sidebar brand, document logo, and the colours everyone in this company sees.</p>
+            <p>Sidebar brand, document logo, colours, and how desk cards pack on Attendance and similar screens.</p>
           </header>
+          <section class="settings-card">
+            <header class="settings-card-head">
+              <span class="settings-icon"><i class="bi bi-grid-1x2"></i></span>
+              <div>
+                <h2>Desk card packing</h2>
+                <p>How multi-card desks fill the page. Saved on this browser.</p>
+              </div>
+            </header>
+            <div class="settings-card-body">
+              <div class="fb-choice" role="radiogroup" aria-label="Desk card packing">
+                <button type="button" class="btn" [class.btn-primary]="pack === 'masonry'" [class.btn-ghost]="pack !== 'masonry'" (click)="setDesk('masonry')">
+                  <i class="bi bi-grid-3x3-gap"></i> Masonry — fill gaps
+                </button>
+                <button type="button" class="btn" [class.btn-primary]="pack === 'classic'" [class.btn-ghost]="pack !== 'classic'" (click)="setDesk('classic')">
+                  <i class="bi bi-layout-sidebar-inset"></i> Classic — main + side
+                </button>
+              </div>
+              <p class="muted" style="margin-top: 12px">Masonry packs punch clock, KPIs and lists into one dense board so empty space under the clock is filled. Classic keeps a left main card and a stacked right rail.</p>
+            </div>
+          </section>
           <app-brand-settings />
         }
       </div>
@@ -194,6 +215,7 @@ export class SettingsGeneralComponent implements OnInit {
   readonly states = STATES;
   readonly banks = ['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank', 'Yes Bank', 'IndusInd Bank', 'IDFC FIRST Bank', 'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India', 'Bank of India', 'Indian Bank', 'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank', 'Bank of Maharashtra', 'Punjab & Sind Bank', 'Federal Bank', 'South Indian Bank', 'Karur Vysya Bank', 'City Union Bank', 'RBL Bank', 'DCB Bank', 'Bandhan Bank', 'CSB Bank', 'Karnataka Bank', 'Tamilnad Mercantile Bank', 'Dhanlaxmi Bank', 'J&K Bank', 'AU Small Finance Bank', 'Equitas Small Finance Bank', 'Ujjivan Small Finance Bank', 'Standard Chartered', 'HSBC', 'Citibank', 'DBS Bank India', 'Deutsche Bank'];
   pane: 'company' | 'accounts' | 'appearance' = 'company';
+  pack: DeskPack = currentDeskPack();
   accounts: SalaryAccountView[] = [];
   offices: OfficePoint[] = [];
   accountId = '';
@@ -215,6 +237,11 @@ export class SettingsGeneralComponent implements OnInit {
   error = '';
   ok = '';
   busy = false;
+
+  setDesk(mode: DeskPack): void {
+    this.pack = mode;
+    setDeskPack(mode);
+  }
 
   async ngOnInit(): Promise<void> {
     try {
@@ -722,6 +749,7 @@ export class SettingsEmailComponent implements OnInit {
       <app-settings-ai />
     } @else if (!current) {
       <div class="integration-cards">
+        @if (canAi) {
         <article class="integration-card">
           <div class="integration-card-main">
             <span class="integration-card-icon"><i class="bi bi-stars"></i></span>
@@ -741,7 +769,8 @@ export class SettingsEmailComponent implements OnInit {
             <button type="button" class="btn btn-ghost btn-sm" (click)="showAiInfo()"><i class="bi bi-info-circle"></i> Info</button>
           </div>
         </article>
-        @for (card of cards; track card.key) {
+        }
+        @for (card of visibleCards; track card.key) {
           <article class="integration-card">
             <div class="integration-card-main">
               <span class="integration-card-icon"><i [class]="icon(card.key)"></i></span>
@@ -940,6 +969,7 @@ export class SettingsIntegrationsComponent implements OnInit {
   private readonly sweet = inject(Sweet);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly session = inject(SessionStore);
   /** Channels that already drive product behaviour when switched on (others are save/test only for now). */
   readonly liveKeys = new Set(['biometric', 'bank', 'webhook', 'api']);
   cards: IntegrationView[] = [];
@@ -965,6 +995,18 @@ export class SettingsIntegrationsComponent implements OnInit {
 
   multiChannel(key: string): boolean {
     return this.multiKeys.has(key);
+  }
+
+  get canAi(): boolean {
+    return (this.session.me?.access || []).includes('ai');
+  }
+
+  get canApi(): boolean {
+    return (this.session.me?.access || []).includes('api');
+  }
+
+  get visibleCards(): IntegrationView[] {
+    return this.cards.filter((card) => (card.key === 'api' ? this.canApi : true));
   }
 
   get aiOn(): boolean {
@@ -1029,7 +1071,7 @@ export class SettingsIntegrationsComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       this.apply(await loadSettings(this.api));
-      if (this.route.snapshot.queryParamMap.get('integration') === 'ai') this.openAi();
+      if (this.canAi && this.route.snapshot.queryParamMap.get('integration') === 'ai') this.openAi();
     } catch (error) {
       this.error = messageOf(error);
     }

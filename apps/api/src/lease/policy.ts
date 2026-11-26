@@ -86,6 +86,8 @@ export interface LeaseV1 {
     features: string[];
     limits: Record<string, number>;
   };
+  plan?: { code: string; name: string };
+  addons?: Array<{ code: string; name: string }>;
   binding: {
     kind: 'host' | 'device' | 'tenant';
     policy: 'any' | 'bind_first' | 'allowlist';

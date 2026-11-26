@@ -13,6 +13,7 @@ interface MonthRow {
   ctc: string;
   slip: { id: string; published: boolean; paidDays: string; lopDays: string; gross: string; net: string } | null;
   suggested: { paidDays: string; lopDays: string; absent: number; unpaid: number; employed: number; tracked: boolean };
+  holidayWork?: { days: number; multiplier: number; hint: string } | null;
   bankReady: boolean;
   payFrom: string;
 }
@@ -73,6 +74,9 @@ interface PayAccount { id: string; label: string; bank: string; mask: string; is
         } @else if (!board.finished) {
           <p class="pm-note"><i class="bi bi-info-circle"></i> {{ board.label }} is not over yet. Absence and unpaid leave are counted up to today, and the rest of the month is assumed paid.</p>
         }
+        @if (holidayHints()) {
+          <p class="pm-note"><i class="bi bi-brightness-high"></i> {{ holidayHints() }} person(s) have approved holiday work. Open each slip and add an earning line using the holiday pay multiplier from Rules.</p>
+        }
         <div class="actions pm-actions">
           @if (!board.locked) {
             <button type="button" class="btn btn-primary" (click)="start()" [disabled]="busy || !startable()">
@@ -130,6 +134,13 @@ export class PayrollMonthComponent implements OnInit {
       text: (row) => (row.suggested.tracked ? `${row.suggested.paidDays} paid · ${row.suggested.lopDays} LOP` : 'No attendance recorded'),
       sub: (row) => (row.suggested.tracked ? `${row.suggested.absent} absent, ${row.suggested.unpaid} unpaid leave` : ''),
     },
+    {
+      key: 'holiday',
+      label: 'Holiday work',
+      optional: true,
+      text: (row) => (row.holidayWork ? `×${row.holidayWork.multiplier} · ${row.holidayWork.days} day(s)` : '—'),
+      sub: (row) => row.holidayWork?.hint || '',
+    },
     { key: 'bank', label: 'Bank', pill: true, text: (row) => (row.bankReady ? 'Ready' : 'Missing') },
     { key: 'payFrom', label: 'Paid from', optional: true, text: (row) => this.board?.accounts.find((account) => account.id === row.payFrom)?.label || '—' },
   ];
@@ -145,6 +156,10 @@ export class PayrollMonthComponent implements OnInit {
 
   startable(): number {
     return this.board ? this.board.rows.filter((row) => !row.slip && row.ctc).length : 0;
+  }
+
+  holidayHints(): number {
+    return this.board ? this.board.rows.filter((row) => row.holidayWork?.days).length : 0;
   }
 
   when(value: string): string {

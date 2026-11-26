@@ -36,7 +36,7 @@ interface TeamPerson {
 }
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-interface ReaderRow { id: string; name: string; kind: string; location: string; path: string; lastSeen: string }
+interface ReaderRow { id: string; name: string; kind: string; location: string; path: string; url?: string; sample?: string; hint?: string; lastSeen: string }
 interface LiveRow { id: string; name: string; code: string; kind: string; at: string; reader: string }
 
 type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
@@ -81,8 +81,8 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
     </div>
 
     @if (tab === 'today') {
-      <div class="att-desk">
-        <div class="att-desk-main">
+      <div class="desk-board att-desk">
+        <div class="desk-tile is-hero">
           @if (mine) {
             <app-punch-clock [state]="mine" (changed)="punched($event)" />
           } @else {
@@ -92,7 +92,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
             </section>
           }
         </div>
-        <aside class="att-desk-side">
+        <div class="desk-tile">
           <section class="card att-snap">
             <div class="card-head">
               <h2><i class="bi bi-activity"></i> Right now</h2>
@@ -122,7 +122,8 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
               <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('month')"><i class="bi bi-calendar3"></i> Open calendar</button>
             </div>
           </section>
-
+        </div>
+        <div class="desk-tile">
           <section class="card att-live-card">
             <div class="card-head">
               <h2><i class="bi bi-broadcast"></i> Latest punches</h2>
@@ -144,7 +145,8 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
               </ul>
             }
           </section>
-
+        </div>
+        <div class="desk-tile">
           <section class="card att-preview">
             <div class="card-head">
               <h2><i class="bi bi-people"></i> Who's in</h2>
@@ -166,7 +168,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
               </ul>
             }
           </section>
-        </aside>
+        </div>
       </div>
     }
 
@@ -199,7 +201,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
             <li><i class="is-holiday"></i> Holiday</li>
           </ul>
         </section>
-        <section class="card day-panel">
+        <section class="card day-panel card-scroll-pane">
           @if (!picked.length) {
             <h2><i class="bi bi-calendar-range"></i> Choose days</h2>
             <p class="muted">Past days can be regularized. Future days can be leave, work from home, or on duty.</p>
@@ -236,6 +238,9 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
                 <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'onduty'">On duty</button>
               </div>
               @if (!pastOnly) { <p class="muted">Regularization and extra time stay off while a future day is selected.</p> }
+              @if (pastOnly && holidayPicked) {
+                <p class="muted fine">Extra time on a company holiday can earn fixed comp-off days and a payroll pay-multiplier hint when Rules → Holiday work is on.</p>
+              }
             }
             @if (panel === 'leave') {
               <form class="day-form" (ngSubmit)="applyLeave()">
@@ -341,10 +346,11 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
     }
 
     @if (tab === 'devices' && canConnect) {
-      <div class="att-devices">
+      <div class="desk-board att-devices">
+        <div class="desk-tile is-hero">
         <section class="card">
           <h2><i class="bi bi-fingerprint"></i> Readers</h2>
-          <p class="muted">A fingerprint, face, or card reader matches the person, then posts the punch to the address below. Altamid does not store the finger, the face, or the card.</p>
+          <p class="muted">There is no database connection string into vendor software. The reader (or a bridge PC / middleware) <strong>POSTs</strong> each punch to the address below. Match the machine user id to <strong>Biometric / badge ID</strong> on the person, or use the EMP code. Altamid does not store the finger, face, or card.</p>
           <form class="reader-add" (ngSubmit)="addReader()">
             <label class="sr" for="reader-name">Reader name</label>
             <input id="reader-name" name="readerName" [(ngModel)]="readerName" placeholder="Gate reader" required>
@@ -368,13 +374,17 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
                 </div>
                 <p class="muted">{{ reader.location || 'No location' }} · {{ reader.lastSeen ? 'Last punch ' + reader.lastSeen : 'Waiting for the first punch' }}</p>
                 <label class="sr" [for]="'reader-url-' + reader.id">Post address</label>
-                <input [id]="'reader-url-' + reader.id" [value]="reader.path" readonly>
-                <p class="muted">Post JSON <span class="mono">{{ samplePunch }}</span></p>
+                <input [id]="'reader-url-' + reader.id" [value]="readerUrl(reader)" readonly>
+                <p class="muted">{{ reader.hint || 'Configure vendor software or a bridge to HTTP POST here when a punch lands.' }}</p>
+                <p class="muted">Sample JSON <span class="mono">{{ reader.sample || samplePunch }}</span></p>
+                <p class="muted fine">Also accepted: <span class="mono">userId</span>, <span class="mono">empCode</span>, <span class="mono">badgeId</span>, <span class="mono">deviceCode</span>; times as <span class="mono">at</span> / <span class="mono">timestamp</span> / <span class="mono">punchedAt</span>.</p>
                 <div class="actions"><button type="button" class="btn btn-ghost" (click)="removeReader(reader.id)">Remove</button></div>
               </article>
             }
           </div>
         </section>
+        </div>
+        <div class="desk-tile">
         <section class="card">
           <h2><i class="bi bi-broadcast"></i> Live punches</h2>
           @if (!live.length) { <p class="muted">No punches in the last few hours.</p> }
@@ -384,6 +394,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
             }
           </ul>
         </section>
+        </div>
       </div>
     }
   `,
@@ -448,6 +459,11 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     return !!this.picked.length && this.picked.every((day) => !!this.calendar && day <= this.calendar.today);
   }
 
+  get holidayPicked(): boolean {
+    if (!this.calendar?.days?.length || !this.picked.length) return false;
+    return this.picked.some((day) => this.calendar!.days.find((row) => row.day === day)?.status === 'holiday');
+  }
+
   get selectionLabel(): string {
     if (this.picked.length === 1) {
       const label = this.selected?.day === this.picked[0] ? this.selected.label : '';
@@ -469,7 +485,11 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   }
 
   get canConnect(): boolean {
-    return !!this.store.me?.access?.includes('attendance.devices') || !!this.store.me?.access?.includes('attendance');
+    return !!this.store.me?.access?.includes('attendance.devices');
+  }
+
+  get canLive(): boolean {
+    return !!this.store.me?.access?.includes('attendance.live') || this.canConnect;
   }
 
   get tabLede(): string {
@@ -531,6 +551,12 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     this.panel = action;
   }
 
+  readerUrl(reader: ReaderRow): string {
+    if (reader.url?.startsWith('http')) return reader.url;
+    if (typeof location !== 'undefined' && reader.path) return location.origin + reader.path;
+    return reader.url || reader.path;
+  }
+
   async ngOnInit(): Promise<void> {
     this.month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
     this.place = this.store.me?.workplace?.location || this.store.me?.company.city || '';
@@ -541,7 +567,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     } catch { /* ignore */ }
     await Promise.all([this.loadPunch(), this.loadCalendar(), this.loadReaders()]);
     if (this.tab === 'devices' && !this.canConnect) this.tab = 'today';
-    if (this.canConnect) this.liveTimer = window.setInterval(() => void this.loadLive(), 8000);
+    if (this.canLive) this.liveTimer = window.setInterval(() => void this.loadLive(), 8000);
   }
 
   ngOnDestroy(): void {
@@ -585,7 +611,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   }
 
   private async loadLive(): Promise<void> {
-    if (!this.canConnect) return;
+    if (!this.canLive) return;
     try {
       this.live = await this.api.get<LiveRow[]>('/v1/attendance/live');
     } catch {

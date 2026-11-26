@@ -21,7 +21,7 @@ const LABELS: Record<string, string> = {
   agencyId: 'Agency', clientId: 'Client', locationId: 'Location', managerId: 'Manager', dateOfJoining: 'Joined',
   dateOfExit: 'Left', confirmedOn: 'Confirmed', probationEndsOn: 'Probation ends', gender: 'Gender', dateOfBirth: 'Date of birth',
   maritalStatus: 'Marital status', nationality: 'Nationality', bloodGroup: 'Blood group',
-  emergencyName: 'Emergency contact', emergencyPhone: 'Emergency phone', address: 'Address', costCentre: 'Cost centre',
+  emergencyName: 'Emergency contact', emergencyPhone: 'Emergency phone', address: 'Address', costCentre: 'Cost centre', deviceCode: 'Biometric / badge ID',
   pan: 'PAN', bankName: 'Bank', bankAccount: 'Account number', ifsc: 'IFSC', signIn: 'Can sign in', role: 'Role',
   password: 'New password', personalEmail: 'Personal email', fatherName: "Father's name", spouseName: "Spouse's name",
   emergencyRelation: 'Emergency relation', city: 'City', state: 'State', pincode: 'PIN code', permanentAddress: 'Permanent address',
@@ -156,6 +156,7 @@ const SECRET = new Set(['pan', 'bankAccount', 'ifsc', 'password', 'aadhaar']);
                 <div><dt>Team</dt><dd>{{ person.team?.name || '—' }}</dd></div>
                 <div><dt>Location</dt><dd>{{ person.location?.name || '—' }}</dd></div>
                 <div><dt>Cost centre</dt><dd>{{ person.costCentre || '—' }}</dd></div>
+                <div><dt>Biometric / badge ID</dt><dd>{{ person.deviceCode ? person.deviceCode : '—' }}</dd></div>
                 <div><dt>Confirmed</dt><dd>{{ person.confirmedOn ? dayLabel(person.confirmedOn) : '—' }}</dd></div>
                 @if (!person.confirmedOn && person.probationEndsOn) { <div><dt>Probation ends</dt><dd>{{ dayLabel(person.probationEndsOn) }}</dd></div> }
                 @if (person.dateOfExit) { <div><dt>Left</dt><dd>{{ dayLabel(person.dateOfExit) }}</dd></div> }
@@ -368,6 +369,11 @@ const SECRET = new Set(['pan', 'bankAccount', 'ifsc', 'password', 'aadhaar']);
               </div>
             }
             <div><label for="centre">Cost centre</label><input id="centre" name="centre" [(ngModel)]="costCentre"></div>
+            <div>
+              <label for="deviceCode">Biometric / badge ID</label>
+              <input id="deviceCode" name="deviceCode" [(ngModel)]="deviceCode" maxlength="40" placeholder="Vendor user id" autocomplete="off">
+              <p class="field-hint">Used when the reader posts a different id than the EMP code.</p>
+            </div>
           </div>
         </section>
         <section class="form-section">
@@ -515,6 +521,7 @@ export class PersonComponent implements OnInit {
   emergencyPhone = '';
   address = '';
   costCentre = '';
+  deviceCode = '';
   readonly bloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
   pan = '';
   bankName = '';
@@ -763,7 +770,7 @@ export class PersonComponent implements OnInit {
       locationId: this.locationId, managerId: this.managerId, dateOfJoining: this.dateOfJoining, dateOfExit: this.dateOfExit,
       confirmedOn: this.confirmedOn, probationEndsOn: this.probationEndsOn, gender: this.gender, dateOfBirth: this.dateOfBirth, maritalStatus: this.maritalStatus,
       nationality: this.nationality, bloodGroup: this.bloodGroup, emergencyName: this.emergencyName,
-      emergencyPhone: this.emergencyPhone, address: this.address, costCentre: this.costCentre, pan: this.pan,
+      emergencyPhone: this.emergencyPhone, address: this.address, costCentre: this.costCentre, deviceCode: this.deviceCode, pan: this.pan,
       bankName: this.bankName, bankAccount: this.bankAccount, ifsc: this.ifsc, signIn: this.signIn, role: this.role,
       password: this.password, ...this.extra,
     };
@@ -926,6 +933,7 @@ export class PersonComponent implements OnInit {
     this.emergencyPhone = person.emergencyPhone;
     this.address = person.address;
     this.costCentre = person.costCentre;
+    this.deviceCode = person.deviceCode || '';
     this.pan = person.pan;
     this.bankName = person.bankName;
     this.bankAccount = person.bankAccount;

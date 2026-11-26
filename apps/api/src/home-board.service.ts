@@ -71,7 +71,7 @@ export class HomeBoardService {
       want('hiring-desk', 'hiring', () => this.hiringDesk(session)),
       want('assets-desk', 'assets', () => this.assetsDesk(session, today)),
       want('my-assets', null, () => this.myAssets(session)),
-      want('my-pay', null, () => this.myPay(session)),
+      want('my-pay', 'pay', () => this.myPay(session)),
       want('my-requests', null, () => this.myRequests(session)),
       want('holidays', null, () => this.holidays(session, today)),
     ]);

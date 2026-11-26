@@ -6,6 +6,7 @@ import { SessionIdleService } from '../core/session-idle.service';
 import { SessionStore } from '../core/session.store';
 import { I18n } from '../core/i18n';
 import { isDarkTheme, setDarkTheme } from '../core/theme';
+import { applyDeskPack, deskPack } from '../core/desk-pack';
 import { applyBrand } from '../core/brand';
 import { NAV_GROUPS, NavGroup, NavItem } from '../core/nav';
 import { AiChatWidgetComponent } from '../shared/ai-chat-widget.component';
@@ -244,8 +245,8 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
         <main class="content">
           <router-outlet />
         </main>
-        <footer class="app-footer"><span>Altamid HRMS & Payroll</span><span>Essentials</span></footer>
-        @if (store.me) { <app-ai-chat-widget /> }
+        <footer class="app-footer"><span>Altamid HRMS & Payroll</span><span>{{ planLabel }}</span></footer>
+        @if (showAiWidget) { <app-ai-chat-widget /> }
       </div>
     </div>
     @if (launchOpen) {
@@ -329,6 +330,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.idle.start();
+    applyDeskPack(deskPack());
     void this.loadPins();
     this.collapsed = localStorage.getItem(SIDEBAR_KEY) === '1' && window.matchMedia('(min-width: 992px)').matches;
     this.applySidebar();
@@ -387,6 +389,10 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   get initial(): string {
     return (this.store.me?.name || 'A').trim().charAt(0).toUpperCase();
+  }
+
+  get showAiWidget(): boolean {
+    return !!(this.store.me && (this.store.me.access || []).includes('ai'));
   }
 
   visibleGroups(): NavGroup[] {
@@ -571,6 +577,11 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   /** Warns when the current outlet's subscription is paused or ends within 30 days. */
+  get planLabel(): string {
+    const licence = this.store.me?.licence as { planName?: string; planCode?: string } | undefined;
+    return licence?.planName || licence?.planCode || 'People';
+  }
+
   get outletNotice(): { text: string; bad: boolean } | null {
     const current = this.store.me?.outlets?.current;
     const outlet = current ? this.outletChoices.find((row) => row.id === current) : null;

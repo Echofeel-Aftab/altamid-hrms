@@ -172,6 +172,9 @@ export class LeaveLedger {
     return context.extra
       .filter((row) => row.employeeId === employeeId && row.day.startsWith(String(year)))
       .reduce((sum, row) => {
+        if (context.policy.holidayWorkEarnsCompOff && context.holidays.has(row.day)) {
+          return sum + (context.policy.holidayWorkCompOffDays || 1);
+        }
         const hours = Number(row.hours) || 0;
         return sum + (hours >= full ? 1 : hours >= halfDay ? 0.5 : 0);
       }, 0);

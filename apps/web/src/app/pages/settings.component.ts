@@ -29,6 +29,8 @@ interface Licence {
   checkedAt: string | null;
   product: string;
   packageLabel: string;
+  planCode?: string;
+  planName?: string;
   seats: number;
   seatLimit: number | null;
   termStartsAt: string | null;
@@ -38,6 +40,9 @@ interface Licence {
   active: boolean;
   keyHint: string;
   bindingHost: string;
+  entitlementsMode?: 'all' | 'list';
+  features?: string[];
+  addons?: Array<{ code: string; name: string }>;
   outlets?: { allowed: number; units: Array<{ subscriptionId: string; main: boolean; usable: boolean; verdict: string; termEndsAt: string; seatsUsed: number | null }> };
 }
 
@@ -129,6 +134,7 @@ interface Licence {
                 <p data-inline-message [class]="licence!.active ? 'form-ok' : 'form-error'">{{ licence!.message }}</p>
                 <dl class="licence-facts">
                   <div><dt>Package</dt><dd>{{ licence!.packageLabel || licence!.product }}</dd></div>
+                  <div><dt>Plan</dt><dd>{{ licence!.planName || licence!.planCode || '—' }}</dd></div>
                   <div><dt>License key</dt><dd class="mono">{{ licence!.keyHint || '••••' }}</dd></div>
                   <div><dt>Expires</dt><dd>{{ licence!.termEndsAt ? unitEnd(licence!.termEndsAt) : '—' }}</dd></div>
                   <div><dt>People</dt><dd>{{ licence!.seats }}@if (licence!.seatLimit !== null) { / {{ licence!.seatLimit }} }</dd></div>
@@ -136,6 +142,9 @@ interface Licence {
                     <div><dt>Outlets</dt><dd>{{ licence!.outlets!.allowed }} allowed</dd></div>
                   }
                 </dl>
+                @if (licence!.addons?.length) {
+                  <p class="muted" style="margin-top:16px"><strong>Add-ons:</strong> {{ addonNames }}</p>
+                }
                 <div class="settings-inline-save licence-actions">
                   <button type="button" class="btn btn-ghost" [disabled]="!!busy" (click)="testLicence()"><i class="bi bi-wifi"></i> {{ busy === 'test' ? 'Testing…' : 'Test connection' }}</button>
                   <button type="button" class="btn btn-ghost btn-danger" [disabled]="!!busy" (click)="deactivateLicence()"><i class="bi bi-x-circle"></i> {{ busy === 'off' ? 'Deactivating…' : 'Deactivate' }}</button>
@@ -234,6 +243,10 @@ export class SettingsComponent implements OnInit {
   tab = 'general';
   moreOpen = false;
   licence: Licence | null = null;
+
+  get addonNames(): string {
+    return (this.licence?.addons || []).map((item) => item.name).join(', ');
+  }
   licenseKey = '';
   current = '';
   next = '';

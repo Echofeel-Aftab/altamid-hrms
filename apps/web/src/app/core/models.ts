@@ -26,7 +26,15 @@ export interface Me {
     pan: string;
     brand?: BrandView;
   };
-  licence: { mode: string; message: string; reason: string };
+  licence: {
+    mode: string;
+    message: string;
+    reason: string;
+    planCode?: string;
+    planName?: string;
+    entitlementsMode?: 'all' | 'list';
+    addons?: Array<{ code: string; name: string }>;
+  };
   access: string[];
   outlets?: OutletContext;
 }
@@ -109,6 +117,7 @@ export interface Person {
   agency?: { id: string; name: string } | null;
   client?: { id: string; name: string } | null;
   costCentre: string;
+  deviceCode: string;
   dateOfJoining: string;
   dateOfExit: string;
   service: string;

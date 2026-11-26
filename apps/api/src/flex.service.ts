@@ -3,6 +3,7 @@ import { AccessService } from './access.service';
 import { todayInIndia } from './dates';
 import { FLEX_DEFAULT, FlexComponent, FlexConfig, poolMatcher } from './flex';
 import { bag, fail, optional, text } from './http';
+import { LicenceService } from './licence.service';
 import { ModuleConfigService } from './module-config.service';
 import { currentPay, fullName, inr, notifyPerson } from './people-kit';
 import { PrismaService } from './prisma.service';
@@ -15,9 +16,11 @@ export class FlexService {
     private readonly prisma: PrismaService,
     private readonly gates: AccessService,
     private readonly config: ModuleConfigService,
+    private readonly licence: LicenceService,
   ) {}
 
   async view(session: SessionUser, yearInput?: string, personInput = '') {
+    await this.licence.assertFeature(session.companyId, 'pay.flex');
     const year = this.yearOf(yearInput);
     const desk = await this.gates.holds(session, 'pay.flex');
     const config = await this.settings(session.companyId);

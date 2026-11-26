@@ -51,6 +51,11 @@
   --motion-fast: 120ms;
   --motion-med: 200ms;
   --ease: cubic-bezier(.2, .7, .3, 1);
+  /* Dense cards scroll inside instead of stretching the page */
+  --scroll-list-sm: min(220px, 32vh);
+  --scroll-list-md: min(360px, 48vh);
+  --scroll-list-lg: min(520px, 62vh);
+  --scroll-pane: calc(100dvh - var(--topbar-h) - 120px);
   --navy-alpha-06: color-mix(in srgb, var(--navy-800) 6%, transparent);
   --navy-alpha-08: color-mix(in srgb, var(--navy-800) 8%, transparent);
   --navy-alpha-10: color-mix(in srgb, var(--navy-800) 10%, transparent);
@@ -894,6 +899,75 @@ html.theme-dark .card > h2 i, html.theme-dark .card .card-head h2 i, html.theme-
 html.theme-dark .card > h2, html.theme-dark .card > .card-head, html.theme-dark .card > form > h2,
 html.theme-dark .card > .card-head h2, html.theme-dark .card h2 { color: #fff; background: transparent; }
 
+/* In-card scroll: long lists stay inside the card; the page stays short. */
+.card-scroll {
+  max-height: var(--scroll-list-md);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+.card-scroll-sm { max-height: var(--scroll-list-sm); }
+.card-scroll-lg { max-height: var(--scroll-list-lg); }
+.card-scroll-pane {
+  max-height: var(--scroll-pane);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+/* Side action panes next to calendars / desks — stick in view and scroll inside */
+.page-split > .card.day-panel,
+.page-split > aside.card,
+.page-split > aside > .card,
+.pay-desk-side > .card,
+.att-devices > .card:last-child {
+  max-height: var(--scroll-pane);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  position: sticky;
+  top: 12px;
+  scrollbar-gutter: stable;
+}
+
+/* Dense list bodies that commonly grow with roster / history data */
+.team-block > ul.plain,
+.att-live,
+.att-preview > .att-live,
+.att-live-card > .att-live,
+.card ul.plain,
+.card > .holiday-year,
+.card > .steps,
+.card > .att-reader-grid,
+.home-box:not([data-key="calendar"]) > .dash-card > .dash-news,
+.home-box:not([data-key="calendar"]) > .dash-card > ul,
+.home-box:not([data-key="calendar"]) > .home-panel > ul,
+.home-box:not([data-key="calendar"]) > .home-panel > .dash-news {
+  max-height: var(--scroll-list-md);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+/* Pane already scrolls as a whole — avoid nested scrollbars */
+.card.day-panel ul.plain,
+.card.card-scroll-pane ul.plain,
+.card.card-scroll-pane .att-live,
+.page-split > .card.day-panel ul.plain,
+.page-split > aside.card .steps,
+.page-split > aside > .card .att-live,
+.pay-desk-side > .card ul.plain {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
 .home-grid, .org-grid, .stat-row, .pack-grid { display: grid; gap: 16px; margin-bottom: 16px; }
 .page-split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr); gap: 16px; align-items: start; margin-bottom: 16px; }
 .page-split > .card { margin-bottom: 0; }
@@ -1537,7 +1611,21 @@ input.switch[type="checkbox"]:disabled { opacity: 0.45; cursor: not-allowed; }
 html.theme-dark input.switch[type="checkbox"] { background: #3a4654; }
 html.theme-dark input.switch[type="checkbox"]:checked { background: var(--gold-500); }
 html.theme-dark input.switch[type="checkbox"]:checked::after { background: #1a1408; }
-.table-responsive { overflow-x: auto; max-width: 100%; }
+.table-responsive {
+  overflow: auto;
+  max-width: 100%;
+  max-height: var(--scroll-list-lg);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.dt-wrap .table-responsive thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: 0 1px 0 var(--border);
+}
 .card, .dt-wrap { max-width: 100%; min-width: 0; }
 .dt-wrap th, .dt-wrap td { white-space: nowrap; width: 1%; border-bottom: 1px solid var(--border); padding: 8px 12px; vertical-align: middle; }
 .dt-wrap th:first-child, .dt-wrap td:first-child { white-space: normal; width: auto; }
@@ -2462,12 +2550,50 @@ html.theme-dark .seg-tabs button.is-on { background: #222d3a; color: var(--gold-
 .att-head { margin-bottom: 12px; }
 .att-tabs, .page-tabs { margin-bottom: 16px; }
 .page-tabs { width: fit-content; max-width: 100%; }
+
+/* Desk packing: masonry fills gaps (default); classic = main + side rail */
+.desk-board,
 .att-desk {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: dense;
   gap: 16px;
   align-items: start;
+  margin-bottom: 16px;
 }
+.desk-board > .desk-tile,
+.att-desk > .desk-tile { min-width: 0; display: flex; flex-direction: column; }
+.desk-board > .desk-tile.is-hero,
+.att-desk > .desk-tile.is-hero { grid-column: span 2; }
+.desk-board > .desk-tile > .card,
+.desk-board > .desk-tile > app-punch-clock,
+.desk-board > .desk-tile > .clock-card,
+.att-desk > .desk-tile > .card,
+.att-desk > .desk-tile > app-punch-clock,
+.att-desk > .desk-tile > .clock-card {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+html.desk-pack-classic .desk-board,
+html.desk-pack-classic .att-desk {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  grid-auto-flow: row;
+  grid-template-rows: auto auto auto;
+}
+html.desk-pack-classic .desk-board > .desk-tile.is-hero,
+html.desk-pack-classic .att-desk > .desk-tile.is-hero {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+html.desk-pack-classic .desk-board > .desk-tile:not(.is-hero),
+html.desk-pack-classic .att-desk > .desk-tile:not(.is-hero) {
+  grid-column: 2;
+}
+
+/* Legacy nested classic structure (if any remaining) */
 .att-desk-main > .clock-card,
 .att-desk-main > app-punch-clock { margin-bottom: 0; }
 .att-desk-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -2502,11 +2628,40 @@ html.theme-dark .att-kpi strong { color: #fff; }
 html.theme-dark .att-live-when { color: var(--gold-400); }
 .att-month-split { margin-bottom: 0; }
 .att-holidays .inline-add { margin: 12px 0 16px; }
-.att-devices { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap: 16px; align-items: start; }
+.att-devices.desk-board { margin-bottom: 0; }
+.att-devices:not(.desk-board) { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap: 16px; align-items: start; }
 .att-devices > .card { margin-bottom: 0; }
 .att-reader-grid { display: grid; gap: 12px; margin-top: 12px; }
+@media (max-width: 1100px) {
+  .desk-board,
+  .att-desk { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .desk-board > .desk-tile.is-hero,
+  .att-desk > .desk-tile.is-hero { grid-column: 1 / -1; }
+  html.desk-pack-classic .desk-board,
+  html.desk-pack-classic .att-desk {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+  html.desk-pack-classic .desk-board > .desk-tile.is-hero,
+  html.desk-pack-classic .att-desk > .desk-tile.is-hero,
+  html.desk-pack-classic .desk-board > .desk-tile:not(.is-hero),
+  html.desk-pack-classic .att-desk > .desk-tile:not(.is-hero) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
 @media (max-width: 980px) {
-  .att-desk, .att-devices { grid-template-columns: 1fr; }
+  .att-desk, .att-devices, .desk-board { grid-template-columns: 1fr; }
+  .desk-board > .desk-tile.is-hero,
+  .att-desk > .desk-tile.is-hero { grid-column: 1 / -1; }
+  .page-split > .card.day-panel,
+  .page-split > aside.card,
+  .page-split > aside > .card,
+  .pay-desk-side > .card,
+  .att-devices > .card:last-child {
+    position: static;
+    max-height: var(--scroll-list-lg);
+  }
 }
 
 .bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }

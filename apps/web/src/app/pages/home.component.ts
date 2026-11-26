@@ -1195,7 +1195,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const all: Array<Shortcut & { show: boolean }> = [
       { link: '/leave', label: 'Apply for leave', icon: 'bi-calendar-plus', show: linked },
       { link: '/requests', label: 'Attendance request', icon: 'bi-clock-history', show: linked },
-      { link: '/pay', label: 'My payslips', icon: 'bi-wallet2', show: linked },
+      { link: '/pay', label: 'My payslips', icon: 'bi-wallet2', show: linked && access.includes('pay') },
       { link: '/profile', label: 'My details', icon: 'bi-person-vcard', show: linked },
       { link: '/approvals', label: 'Approvals', icon: 'bi-check2-square', show: access.includes('approvals') },
       { link: '/exceptions', label: 'Exceptions', icon: 'bi-exclamation-triangle', show: access.includes('exceptions') },

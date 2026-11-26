@@ -7,6 +7,7 @@ import { bag, fail, optional, text } from './http';
 import { LeaveLedger } from './leave-ledger.service';
 import { letterPdf } from './letter-pdf';
 import { letterLook, longDate } from './letter-look';
+import { LicenceService } from './licence.service';
 import { ModuleConfigService } from './module-config.service';
 import { currentPay, fullName, inr } from './people-kit';
 import { PrismaService } from './prisma.service';
@@ -33,9 +34,11 @@ export class RewardsService {
     private readonly config: ModuleConfigService,
     private readonly ledger: LeaveLedger,
     private readonly brand: BrandService,
+    private readonly licence: LicenceService,
   ) {}
 
   async view(session: SessionUser, personInput = '') {
+    await this.licence.assertFeature(session.companyId, 'pay.rewards');
     const desk = await this.gates.holds(session, 'pay.rewards');
     const employeeId = personInput && (desk || await this.gates.holds(session, 'pay')) ? personInput : session.employeeId || '';
     const config = await this.settings(session.companyId);

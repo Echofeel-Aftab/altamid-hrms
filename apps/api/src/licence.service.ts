@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Company } from '@prisma/client';
 import { dataKey, maskSecret, openSecret, seal } from './crypto';
+import { ALL_ENTITLEMENT_KEYS, HRMS_CORE_FEATURES, entitlementForAccess } from './entitlements';
 import { fail } from './http';
 import { decideAccess, isVerdict, LeaseV1, verdictMessage } from './lease/policy';
 import { verifyLeaseSignature } from './lease/verify';
@@ -13,6 +14,11 @@ const PACKAGE_LABELS: Record<string, string> = {
   crm: 'CRM',
 };
 
+/** Always keep these so Settings → Licence and Access stay reachable. */
+const SETUP_FEATURES = new Set(['settings', 'settings.brand', 'access']);
+
+const CORE_SET = () => new Set([...HRMS_CORE_FEATURES, ...SETUP_FEATURES]);
+
 export interface LicenceView {
   mode: 'setup' | 'allow' | 'restrict';
   reason: string;
@@ -20,6 +26,8 @@ export interface LicenceView {
   checkedAt: string | null;
   product: string;
   packageLabel: string;
+  planCode: string;
+  planName: string;
   seats: number;
   seatLimit: number | null;
   termStartsAt: string | null;
@@ -30,6 +38,9 @@ export interface LicenceView {
   keyHint: string;
   bindingHost: string;
   outlets: OutletAllowance;
+  entitlementsMode: 'all' | 'list';
+  features: string[];
+  addons: Array<{ code: string; name: string }>;
 }
 
 /** How many outlets the subscriptions behind this install pay for. Without outlet subscriptions an install runs one outlet. */
@@ -47,6 +58,31 @@ export class LicenceService {
   async view(companyId: string): Promise<LicenceView> {
     const company = await this.company(companyId);
     return this.toView(company, await this.seats(companyId));
+  }
+
+  /** Whether the Control lease unlocks this commercial feature (Access still required separately). */
+  async isEntitled(companyId: string, feature: string): Promise<boolean> {
+    const key = entitlementForAccess(feature);
+    const pack = await this.entitlementPack(companyId);
+    if (pack.mode === 'all') return true;
+    if (SETUP_FEATURES.has(key)) return true;
+    return pack.features.has(key);
+  }
+
+  async filterEntitled(companyId: string, keys: string[]): Promise<string[]> {
+    const pack = await this.entitlementPack(companyId);
+    if (pack.mode === 'all') return keys;
+    return keys.filter((key) => SETUP_FEATURES.has(key) || pack.features.has(entitlementForAccess(key)));
+  }
+
+  async assertFeature(companyId: string, feature: string, message?: string): Promise<void> {
+    if (await this.isEntitled(companyId, feature)) return;
+    fail(403, message || 'You do not have access.');
+  }
+
+  private async entitlementPack(companyId: string): Promise<{ mode: 'all' | 'list'; features: Set<string> }> {
+    const company = await this.company(companyId);
+    return this.packFromLease(Boolean(company.licenseKeyEnc), this.readLease(company.leaseJson));
   }
 
   async assertCanHire(companyId: string): Promise<void> {
@@ -153,9 +189,14 @@ export class LicenceService {
       if (match && verifyLeaseSignature(signed.lease, signed.signature, match.publicKeyRaw)) {
         fresh = signed.lease;
         transportFailed = false;
+        const planCode = fresh.plan?.code ? String(fresh.plan.code).slice(0, 40) : undefined;
         await this.prisma.company.update({
           where: { id: companyId },
-          data: { leaseJson: JSON.stringify(fresh), leaseCheckedAt: new Date() },
+          data: {
+            leaseJson: JSON.stringify(fresh),
+            leaseCheckedAt: new Date(),
+            ...(planCode ? { planCode } : {}),
+          },
         });
       }
     } catch {
@@ -263,12 +304,19 @@ export class LicenceService {
   private toView(company: Company, seats: number): LicenceView {
     const hasKey = Boolean(company.licenseKeyEnc);
     const keyHint = hasKey ? maskSecret(openSecret(company.licenseKeyEnc, this.key) || '••••') : '';
+    const lease = this.readLease(company.leaseJson);
+    const pack = this.packFromLease(hasKey, lease);
     const base = {
       checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
       seats,
       bindingHost: company.bindingHost,
       hasKey,
       keyHint,
+      planCode: company.planCode || 'essentials',
+      planName: '',
+      entitlementsMode: pack.mode,
+      features: [...pack.features],
+      addons: [] as Array<{ code: string; name: string }>,
     };
     if (!hasKey) {
       return {
@@ -278,6 +326,7 @@ export class LicenceService {
         message: 'Paste the license key from Altamid Control and choose Activate. Features stay paused until the key is valid.',
         product: PRODUCT_CODE,
         packageLabel: PACKAGE_LABELS[PRODUCT_CODE] || PRODUCT_CODE,
+        planName: 'Not activated',
         seatLimit: null,
         termStartsAt: null,
         termEndsAt: null,
@@ -286,7 +335,6 @@ export class LicenceService {
         outlets: this.allowance(null),
       };
     }
-    const lease = this.readLease(company.leaseJson);
     if (!lease || !isVerdict(lease.verdict)) {
       return {
         ...base,
@@ -295,6 +343,7 @@ export class LicenceService {
         message: 'Waiting for the first successful check-in with Altamid Control. New people stay paused until then. Existing records stay available.',
         product: PRODUCT_CODE,
         packageLabel: PACKAGE_LABELS[PRODUCT_CODE] || PRODUCT_CODE,
+        planName: company.planCode || 'Pending',
         seatLimit: null,
         termStartsAt: null,
         termEndsAt: null,
@@ -304,6 +353,8 @@ export class LicenceService {
       };
     }
     const product = lease.product || PRODUCT_CODE;
+    const planCode = lease.plan?.code || company.planCode || 'essentials';
+    const planName = lease.plan?.name || planCode;
     return {
       ...base,
       mode: lease.usable ? 'allow' : 'restrict',
@@ -313,13 +364,27 @@ export class LicenceService {
         : verdictMessage(lease.verdict) + ' New people and payroll runs stay paused. Existing records stay available.',
       product,
       packageLabel: PACKAGE_LABELS[product] || product,
+      planCode,
+      planName,
       seatLimit: lease.seats?.limit ?? null,
       termStartsAt: lease.termStartsAt || null,
       termEndsAt: lease.termEndsAt || null,
       status: lease.status || lease.verdict,
       active: lease.usable === true,
       outlets: this.allowance(lease),
+      addons: Array.isArray(lease.addons) ? lease.addons.map((item) => ({ code: String(item.code), name: String(item.name) })) : [],
     };
+  }
+
+  private packFromLease(hasKey: boolean, lease: LeaseV1 | null): { mode: 'all' | 'list'; features: Set<string> } {
+    if (!hasKey || !lease) return { mode: 'list', features: CORE_SET() };
+    if (lease.entitlements?.mode === 'all') return { mode: 'all', features: new Set(ALL_ENTITLEMENT_KEYS) };
+    if (lease.entitlements?.mode === 'list' && Array.isArray(lease.entitlements.features) && lease.entitlements.features.length) {
+      const features = new Set(lease.entitlements.features.map((item) => entitlementForAccess(String(item))));
+      for (const key of SETUP_FEATURES) features.add(key);
+      return { mode: 'list', features };
+    }
+    return { mode: 'list', features: CORE_SET() };
   }
 
   private readLease(raw: string): LeaseV1 | null {

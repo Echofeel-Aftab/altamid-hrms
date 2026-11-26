@@ -5,6 +5,7 @@ import { chatAccount, pingAccount, ProviderAccount } from './ai-providers';
 import { accountReady, AiSettings, ChatMessage } from './ai.types';
 import { AiToolsService } from './ai-tools';
 import { openSecret } from './crypto';
+import { LicenceService } from './licence.service';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
 import { SettingsService } from './settings.service';
@@ -16,17 +17,20 @@ export class AiService {
     private readonly tools: AiToolsService,
     private readonly gates: AccessService,
     private readonly prisma: PrismaService,
+    private readonly licence: LicenceService,
   ) {}
 
   async bootstrap(session: SessionUser) {
+    const onPlan = await this.licence.isEntitled(session.companyId, 'ai');
     const cfg = await this.settings.aiConfig(session.companyId);
-    const ready = cfg.enabled && cfg.accounts.some(accountReady);
+    const ready = onPlan && cfg.enabled && cfg.accounts.some(accountReady);
     const keys = await this.gates.keys(session);
     return {
-      enabled: cfg.enabled,
+      enabled: onPlan && cfg.enabled,
       ready,
       chips: ready ? chipsForAccess(keys, session.role) : [],
-      canAct: session.role === 'owner' || (await this.gates.holds(session, 'people.edit')) || (await this.gates.holds(session, 'approvals')),
+      canAct: onPlan && (session.role === 'owner' || (await this.gates.holds(session, 'people.edit')) || (await this.gates.holds(session, 'approvals'))),
+      onPlan,
     };
   }
 
@@ -35,6 +39,15 @@ export class AiService {
     history: ChatMessage[],
     pagePath = '',
   ): Promise<{ text: string; accountId: string; stub: boolean; confirm: unknown; trace: Array<{ name: string; ok: boolean; message: string }>; path?: string }> {
+    if (!(await this.licence.isEntitled(session.companyId, 'ai'))) {
+      return {
+        text: 'You do not have access.',
+        accountId: '',
+        stub: true,
+        confirm: null,
+        trace: [],
+      };
+    }
     const cfg = await this.settings.aiConfig(session.companyId);
     if (!cfg.enabled) {
       return {

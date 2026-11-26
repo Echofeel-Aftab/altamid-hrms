@@ -5,6 +5,7 @@ import { AccessService } from './access.service';
 import { todayInIndia } from './dates';
 import { FLEX_DEFAULT, FlexConfig } from './flex';
 import { bag, fail, optional, text } from './http';
+import { LicenceService } from './licence.service';
 import { ModuleConfigService } from './module-config.service';
 import { ageOn, currentPay, fullName, inr, notifyPerson, uploadOf } from './people-kit';
 import { PrismaService } from './prisma.service';
@@ -25,15 +26,18 @@ export class TaxService {
     private readonly prisma: PrismaService,
     private readonly gates: AccessService,
     private readonly config: ModuleConfigService,
+    private readonly licence: LicenceService,
   ) {}
 
   async mine(session: SessionUser, yearInput?: string) {
+    await this.licence.assertFeature(session.companyId, 'pay.tax');
     if (!session.employeeId) fail(400, 'This sign-in is not linked to a person, so there is no tax to declare.');
     return this.sheet(session, session.employeeId, this.yearOf(yearInput), false);
   }
 
   /** What tax would be under each regime for figures the person types, without saving anything. */
   async simulate(session: SessionUser, raw: unknown) {
+    await this.licence.assertFeature(session.companyId, 'pay.tax');
     const input = bag(raw);
     const year = this.yearOf(input.year);
     const base = session.employeeId ? await this.inputFor(session.companyId, session.employeeId, year) : null;
@@ -58,6 +62,7 @@ export class TaxService {
   }
 
   async save(session: SessionUser, raw: unknown) {
+    await this.licence.assertFeature(session.companyId, 'pay.tax');
     if (!session.employeeId) fail(400, 'This sign-in is not linked to a person.');
     const input = bag(raw);
     const year = this.yearOf(input.year);
@@ -84,6 +89,7 @@ export class TaxService {
   }
 
   async addProof(session: SessionUser, raw: unknown) {
+    await this.licence.assertFeature(session.companyId, 'pay.tax');
     if (!session.employeeId) fail(400, 'This sign-in is not linked to a person.');
     const input = bag(raw);
     const year = this.yearOf(input.year);

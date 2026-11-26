@@ -143,6 +143,11 @@ export class HrmsController {
     return this.workplace.saveLeaveType(request.session, body);
   }
 
+  @Post('leave/types/pack')
+  addLeavePack(@Req() request: RequestWithSession) {
+    return this.workplace.addLeavePack(request.session);
+  }
+
   @Get('payroll/month/:month')
   payrollMonth(@Req() request: RequestWithSession, @Param('month') month: string) {
     return this.pay.month(request.session, month);

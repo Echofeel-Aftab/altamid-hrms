@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AccessService } from './access.service';
 import { todayInIndia } from './dates';
 import { bag, fail, optional, text } from './http';
+import { LicenceService } from './licence.service';
 import { fullName, notifyPerson } from './people-kit';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
@@ -14,9 +15,11 @@ export class PerformanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gates: AccessService,
+    private readonly licence: LicenceService,
   ) {}
 
   async view(session: SessionUser, cycleInput = '', personInput = '') {
+    await this.licence.assertFeature(session.companyId, 'performance');
     const hr = await this.gates.holds(session, 'performance');
     const cycles = await this.prisma.reviewCycle.findMany({ where: { companyId: session.companyId }, orderBy: [{ startDay: 'desc' }, { createdAt: 'desc' }], take: 40 });
     const cycle = cycles.find((row) => row.id === cycleInput) || cycles.find((row) => row.phase !== 'closed') || cycles[0] || null;

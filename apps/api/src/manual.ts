@@ -57,9 +57,19 @@ export const MANUAL: ManualSection[] = [
         title: 'Sign in',
         steps: [
           'Open the HRMS address your company shared and choose Sign in.',
-          'Enter your Work email and Password, then choose Sign in.',
+          'Choose Password, or One-time code to receive a short code by email or mobile.',
+          'For a password sign-in, enter your Work email and Password, then choose Sign in.',
+          'If Authenticator is on for your account, enter the 6-digit app code or an 8-digit backup code.',
           'If your company has more than one outlet, choose the outlet you are working in. Master sign-ins can also choose All outlets.',
           'Five wrong passwords in a row pause sign-in for 15 minutes.',
+        ],
+      },
+      {
+        title: 'Sign in with a one-time code',
+        steps: [
+          'On Sign in choose One-time code, then Email or Mobile.',
+          'Enter your work email or 10-digit mobile and choose Send code.',
+          'Enter the 6-digit code from the message and choose Sign in.',
         ],
       },
       {
@@ -237,8 +247,10 @@ export const MANUAL: ManualSection[] = [
         title: 'Connect punch readers',
         when: has('attendance.devices'),
         steps: [
-          'In Readers choose Connect and give the fingerprint, face or card reader a name.',
-          'Copy the details shown into the reader, or into its software.',
+          'Open Attendance › Devices (or Readers). There is no database connection string into vendor software.',
+          'Choose Connect, name the fingerprint, face or card reader, and save.',
+          'Copy the punch POST address shown for that reader into the reader, bridge PC or middleware.',
+          'Map each machine user id to Biometric / badge ID on the person (People › Edit details), or use the EMP code. Altamid does not store the finger, face or card.',
           'Choose Remove to disconnect a reader that is no longer used.',
         ],
       },
@@ -257,11 +269,15 @@ export const MANUAL: ManualSection[] = [
     menu: 'My day › Leave',
     why: 'Leave shows how many days you have left of each type and is where you apply. Weekly offs and holidays inside your dates are not counted.',
     example: 'You need Friday and Monday off. Choose Casual leave, From Friday, To Monday. HRMS counts 2 days because the weekend is off.',
-    tips: ['A half day is for one working day only, so From and To must be the same day.', 'You can cancel a request while it is still pending.'],
+    tips: [
+      'A half day is for one working day only, so From and To must be the same day.',
+      'You can cancel a request while it is still pending.',
+      'Comp-off balance rises when extra time or holiday work is approved under company rules.',
+    ],
     howTo: [
       {
         title: 'Check your balance',
-        body: 'Each leave type shows days entitled, taken and left. Types marked Open have no yearly limit.',
+        body: 'Each leave type shows days entitled, taken and left. Types marked Open have no yearly limit. Comp-off is credited from approved extra time or holiday work, not from a fixed yearly quota alone.',
       },
       {
         title: 'Apply for leave',
@@ -632,6 +648,14 @@ export const MANUAL: ManualSection[] = [
         ],
       },
       { title: 'Change your photo', steps: ['Choose the camera on your picture.', 'Pick a JPG or PNG. HRMS crops it square.'] },
+      {
+        title: 'Turn on Authenticator',
+        steps: [
+          'Open the Security tab.',
+          'Choose Set up Google Authenticator, scan the QR (or type the key) in your authenticator app, enter the 6-digit code, then choose Turn on.',
+          'Copy the backup codes now. Each works once. A stolen password alone cannot open HRMS while Authenticator is on.',
+        ],
+      },
       { title: 'See your documents and assets', body: 'My documents lists letters and files shared with you. My assets lists the laptop, phone or ID card issued to you.' },
       {
         title: 'Resign',
@@ -778,6 +802,7 @@ export const MANUAL: ManualSection[] = [
         steps: [
           'Choose Edit details.',
           'Change what you need. Pay details are stored encrypted.',
+          'Set Biometric / badge ID to the machine user id from the punch reader when it differs from the EMP code.',
           'Choose Review changes. Check each before and after, then choose Approve and save, or Discard changes.',
         ],
       },
@@ -1051,6 +1076,14 @@ export const MANUAL: ManualSection[] = [
         when: has('settings.brand'),
         steps: ['Set the Brand name, subtitle and website.', 'Upload the App icon and Document logo.', 'Pick a colour preset or Custom colours and choose Save brand.'],
       },
+      {
+        title: 'Appearance and desk packing',
+        steps: [
+          'Open Appearance under General.',
+          'Choose Masonry to pack punch clock, KPIs and lists into one dense board, or Classic for a main card with a stacked side rail.',
+          'The choice is kept on this browser. Brand logo and colours on the same pane need Brand access.',
+        ],
+      },
     ],
   },
   {
@@ -1081,11 +1114,25 @@ export const MANUAL: ManualSection[] = [
     path: '/settings?tab=rules',
     menu: 'Settings › Rules',
     when: has('settings'),
-    why: 'Probation, notice period and comp-off rules, leave types, daily automatic jobs, and hiring re-apply gaps. Approval chains are under Approvals.',
+    why: 'Probation, notice period, comp-off and holiday-work rules, leave types, daily automatic jobs, and hiring re-apply gaps. Approval chains are under Approvals.',
     howTo: [
-      { title: 'People rules and daily jobs', steps: ['Set probation length, notice period and comp-off.', 'Switch on the daily jobs you want, such as birthday emails.', 'Choose Save people & automation. Choose Run now to try it today.'] },
+      {
+        title: 'People rules and daily jobs',
+        steps: [
+          'Set probation length, notice period and the hours that earn a full or half comp-off day.',
+          'Under Holiday work, tick Holiday work earns comp-off if approved extra time on a company holiday should credit fixed comp-off days, then pick days per holiday and the payroll pay multiplier hint (slips stay manual).',
+          'Switch on the daily jobs you want, such as birthday emails.',
+          'Choose Save people & automation. Choose Run now to try it today.',
+        ],
+      },
       { title: 'Hiring re-apply', steps: ['Set the gap after a rejection or after someone leaves.', 'Choose whether the public form shows the cooling message.', 'Choose Save hiring rules.'] },
-      { title: 'Leave types', steps: ['Choose a type or New leave type, set the yearly days and rules.', 'Choose Save leave type.'] },
+      {
+        title: 'Leave types',
+        steps: [
+          'Choose a type or New leave type, set the yearly days and rules, then Save leave type.',
+          'Choose Add missing leave types to seed common types your company does not have yet (for example Comp-off, Maternity, Paternity). Existing types are left alone.',
+        ],
+      },
     ],
   },
   {

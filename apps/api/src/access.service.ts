@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { entitlementForAccess } from './entitlements';
 import { fail } from './http';
+import { LicenceService } from './licence.service';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
 import { TtlCache } from './ttl-cache';
@@ -12,8 +14,8 @@ export const FEATURES: Array<{ group: string; key: string; label: string; hint: 
   { group: 'People', key: 'performance', label: 'Performance reviews', hint: 'Run review cycles, see every goal and rating, and set the final rating', roles: ['owner', 'hr'] },
   { group: 'People', key: 'succession', label: 'Succession', hint: 'Key roles and who could step into them', roles: ['owner', 'hr'] },
   { group: 'Time', key: 'approvals', label: 'Approvals', hint: 'Decide leave and attendance. Team scope stays on that person’s own reports.', roles: ['owner', 'hr', 'manager', 'team-lead'] },
-  { group: 'Time', key: 'attendance', label: 'Holidays', hint: 'Add and remove company holidays', roles: ['owner', 'hr'] },
-  { group: 'Time', key: 'attendance.devices', label: 'Punch readers', hint: 'Connect a fingerprint, face, or card reader', roles: ['owner', 'hr'], through: ['attendance'] },
+  { group: 'Time', key: 'attendance', label: 'Holidays & leave types', hint: 'Add and remove company holidays, and edit leave types when Settings is off', roles: ['owner', 'hr'] },
+  { group: 'Time', key: 'attendance.devices', label: 'Punch readers', hint: 'Connect a fingerprint, face, or card reader and copy its punch POST address', roles: ['owner', 'hr'], through: ['attendance'] },
   { group: 'Time', key: 'exceptions', label: 'Exceptions', hint: 'Late, absent, and missed punches. Team scope sees their own line.', roles: ['owner', 'hr', 'payroll', 'manager', 'team-lead'] },
   { group: 'Time', key: 'attendance.live', label: 'Live punches', hint: 'The company live feed', roles: ['owner', 'hr', 'payroll'] },
   { group: 'Company', key: 'news', label: 'Announcements', hint: 'Post news for the company', roles: ['owner', 'hr'] },
@@ -32,6 +34,8 @@ export const FEATURES: Array<{ group: string; key: string; label: string; hint: 
   { group: 'Setup', key: 'settings', label: 'Settings', hint: 'Company, email, and the licence. Also turns on brand.', roles: ['owner', 'hr'] },
   { group: 'Setup', key: 'settings.brand', label: 'Brand', hint: 'Colours, logo, and icon', roles: ['owner', 'hr'], through: ['settings'] },
   { group: 'Setup', key: 'access', label: 'Access', hint: 'Who may manage each area, by role, department, or person', roles: ['owner'] },
+  { group: 'Setup', key: 'ai', label: 'AI assistant', hint: 'Staff AI chat and provider setup', roles: ['owner', 'hr'] },
+  { group: 'Setup', key: 'api', label: 'Company API', hint: 'External REST API and key', roles: ['owner', 'hr'] },
 ];
 
 const KINDS = ['role', 'department', 'person', 'level'] as const;
@@ -58,17 +62,42 @@ export class AccessService {
   private readonly ladderCache = new TtlCache<Array<{ key: string; name: string; rank: number; scope: string }>>(60_000);
   private readonly placeCache = new TtlCache<{ departmentId: string; levelId: string }>(30_000);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => LicenceService)) private readonly licence: LicenceService,
+  ) {}
+
+  /**
+   * Commercial surfaces every signed-in person may open for themselves when the lease
+   * includes them. Desk writes still use holds()/gate() (RBAC), not these alone.
+   */
+  private static readonly SELF_SURFACES = [
+    'pay',
+    'pay.tax',
+    'pay.flex',
+    'pay.rewards',
+    'performance',
+    'surveys',
+    'jobs',
+    'library',
+  ] as const;
 
   async keys(session: SessionUser): Promise<string[]> {
-    if (session.role === 'owner') return FEATURES.map((item) => item.key);
-    const grants = await this.ready(session.companyId);
-    const place = await this.place(session);
-    const held = new Set(FEATURES.map((item) => item.key).filter((feature) => this.granted(grants, feature, 'role', session.role) || this.granted(grants, feature, 'department', place.departmentId) || this.granted(grants, feature, 'level', place.levelId) || this.granted(grants, feature, 'person', session.employeeId || '')));
-    if ([...held].some((key) => key.startsWith('pay.'))) held.add('pay');
-    if (held.has('hiring.forms')) held.add('hiring');
-    if (held.has('settings.brand')) held.add('settings');
-    return [...held];
+    let held: string[];
+    if (session.role === 'owner') {
+      held = FEATURES.map((item) => item.key);
+    } else {
+      const grants = await this.ready(session.companyId);
+      const place = await this.place(session);
+      const set = new Set(FEATURES.map((item) => item.key).filter((feature) => this.granted(grants, feature, 'role', session.role) || this.granted(grants, feature, 'department', place.departmentId) || this.granted(grants, feature, 'level', place.levelId) || this.granted(grants, feature, 'person', session.employeeId || '')));
+      if ([...set].some((key) => key.startsWith('pay.'))) set.add('pay');
+      if (set.has('hiring.forms')) set.add('hiring');
+      if (set.has('settings.brand')) set.add('settings');
+      held = [...set];
+    }
+    const entitled = await this.licence.filterEntitled(session.companyId, held);
+    const surfaces = await this.licence.filterEntitled(session.companyId, [...AccessService.SELF_SURFACES]);
+    return [...new Set([...entitled, ...surfaces])];
   }
 
   /** What a role holds on its own, before any department, grade or person grants. */
@@ -95,17 +124,31 @@ export class AccessService {
     if (!person) fail(404, 'That person was not found.');
     const role = person.user?.role || 'employee';
     const grants = await this.ready(session.companyId);
-    const items = FEATURES.map((feature) => ({
-      group: feature.group,
-      key: feature.key,
-      label: feature.label,
-      hint: feature.hint,
-      fromRole: this.direct(grants, feature.key, 'role', role),
-      fromDepartment: this.direct(grants, feature.key, 'department', person.departmentId || ''),
-      fromLevel: this.direct(grants, feature.key, 'level', person.levelId || ''),
-      personal: this.direct(grants, feature.key, 'person', person.id),
-      held: this.granted(grants, feature.key, 'role', role) || this.granted(grants, feature.key, 'department', person.departmentId || '') || this.granted(grants, feature.key, 'level', person.levelId || '') || this.granted(grants, feature.key, 'person', person.id) || role === 'owner',
-    }));
+    const items = (
+      await Promise.all(
+        FEATURES.map(async (feature) => {
+          const onPlan = await this.licence.isEntitled(session.companyId, feature.key);
+          if (!onPlan) return null;
+          const heldRbac =
+            this.granted(grants, feature.key, 'role', role) ||
+            this.granted(grants, feature.key, 'department', person.departmentId || '') ||
+            this.granted(grants, feature.key, 'level', person.levelId || '') ||
+            this.granted(grants, feature.key, 'person', person.id) ||
+            role === 'owner';
+          return {
+            group: feature.group,
+            key: feature.key,
+            label: feature.label,
+            hint: feature.hint,
+            fromRole: this.direct(grants, feature.key, 'role', role),
+            fromDepartment: this.direct(grants, feature.key, 'department', person.departmentId || ''),
+            fromLevel: this.direct(grants, feature.key, 'level', person.levelId || ''),
+            personal: this.direct(grants, feature.key, 'person', person.id),
+            held: heldRbac,
+          };
+        }),
+      )
+    ).filter((item): item is NonNullable<typeof item> => item !== null);
     const ladder = await this.ensureLadder(session.companyId);
     const named = ladder.find((item) => item.key === role);
     return {
@@ -126,9 +169,16 @@ export class AccessService {
     const person = await this.prisma.employee.findFirst({ where: { id: employeeId, companyId: session.companyId }, include: { level: true } });
     if (!person) fail(404, 'That person was not found.');
     const known = new Set(FEATURES.map((item) => item.key));
-    const personal = this.cleanKeys(input.personal, known).filter((key) => session.role === 'owner' || key !== 'access');
-    const department = this.cleanKeys(input.department, known).filter((key) => session.role === 'owner' || key !== 'access');
-    const level = this.cleanKeys(input.level, known).filter((key) => session.role === 'owner' || key !== 'access');
+    const onPlan = new Set(await this.licence.filterEntitled(session.companyId, [...known]));
+    const personal = this.cleanKeys(input.personal, known)
+      .filter((key) => onPlan.has(key))
+      .filter((key) => session.role === 'owner' || key !== 'access');
+    const department = this.cleanKeys(input.department, known)
+      .filter((key) => onPlan.has(key))
+      .filter((key) => session.role === 'owner' || key !== 'access');
+    const level = this.cleanKeys(input.level, known)
+      .filter((key) => onPlan.has(key))
+      .filter((key) => session.role === 'owner' || key !== 'access');
     const spareAccess = session.role === 'owner' ? {} : { feature: { not: 'access' } };
     await this.ready(session.companyId);
     await this.prisma.accessGrant.deleteMany({ where: { companyId: session.companyId, subjectKind: 'person', subjectId: person.id, ...spareAccess } });
@@ -161,10 +211,12 @@ export class AccessService {
   }
 
   async holds(session: SessionUser, feature: string): Promise<boolean> {
+    if (!(await this.licence.isEntitled(session.companyId, entitlementForAccess(feature)))) return false;
     return (await this.span(session, feature)) !== 'none';
   }
 
   async span(session: SessionUser, feature: string): Promise<'company' | 'team' | 'none'> {
+    if (!(await this.licence.isEntitled(session.companyId, entitlementForAccess(feature)))) return 'none';
     if (session.role === 'owner') return 'company';
     const grants = await this.ready(session.companyId);
     const place = await this.place(session);
@@ -240,8 +292,9 @@ export class AccessService {
         take: 500,
       }),
     ]);
+    const entitled = new Set(await this.licence.filterEntitled(session.companyId, FEATURES.map((item) => item.key)));
     return {
-      features: FEATURES.map((item) => ({
+      features: FEATURES.filter((item) => entitled.has(item.key)).map((item) => ({
         key: item.key,
         group: item.group,
         label: item.label,
@@ -258,7 +311,9 @@ export class AccessService {
         code: row.code,
         department: row.department?.name || '',
       })),
-      grants: grants.map((grant) => ({ feature: grant.feature, kind: grant.subjectKind, id: grant.subjectId })),
+      grants: grants
+        .filter((grant) => entitled.has(grant.feature))
+        .map((grant) => ({ feature: grant.feature, kind: grant.subjectKind, id: grant.subjectId })),
     };
   }
 
@@ -267,6 +322,7 @@ export class AccessService {
     const raw = body && typeof body === 'object' ? (body as { grants?: unknown }).grants : null;
     if (!Array.isArray(raw)) fail(400, 'Choose who may manage each area.');
     const known = new Set(FEATURES.map((item) => item.key));
+    const entitled = new Set(await this.licence.filterEntitled(session.companyId, [...known]));
     const departments = new Set((await this.prisma.department.findMany({ where: { companyId: session.companyId }, select: { id: true } })).map((row) => row.id));
     const people = new Set((await this.prisma.employee.findMany({
       where: { companyId: session.companyId, status: { in: ['active', 'onboarding'] } },
@@ -278,7 +334,7 @@ export class AccessService {
       const feature = String((item as { feature?: string }).feature || '');
       const kind = String((item as { kind?: string }).kind || '');
       const id = String((item as { id?: string }).id || '');
-      if (!known.has(feature) || !(KINDS as readonly string[]).includes(kind) || !id) continue;
+      if (!known.has(feature) || !entitled.has(feature) || !(KINDS as readonly string[]).includes(kind) || !id) continue;
       if (kind === 'role' && id === 'owner') continue;
       if (feature === 'access' && session.role !== 'owner') continue;
       if (kind === 'role' && !(await this.ensureLadder(session.companyId)).some((role) => role.key === id)) fail(400, 'That role is not on the ladder.');
@@ -287,12 +343,15 @@ export class AccessService {
       if (kind === 'person' && !people.has(id)) fail(400, 'That person cannot be given access.');
       next.set(`${feature}:${kind}:${id}`, { feature, subjectKind: kind, subjectId: id });
     }
-    for (const feature of known) next.set(`${feature}:role:owner`, { feature, subjectKind: 'role', subjectId: 'owner' });
-    if (session.role !== 'owner') {
-      const kept = await this.prisma.accessGrant.findMany({ where: { companyId: session.companyId, feature: 'access' } });
-      for (const grant of kept) {
-        next.set(`${grant.feature}:${grant.subjectKind}:${grant.subjectId}`, { feature: grant.feature, subjectKind: grant.subjectKind, subjectId: grant.subjectId });
-      }
+    for (const feature of entitled) next.set(`${feature}:role:owner`, { feature, subjectKind: 'role', subjectId: 'owner' });
+    const existing = await this.prisma.accessGrant.findMany({ where: { companyId: session.companyId } });
+    for (const grant of existing) {
+      if (entitled.has(grant.feature) && !(session.role !== 'owner' && grant.feature === 'access')) continue;
+      next.set(`${grant.feature}:${grant.subjectKind}:${grant.subjectId}`, {
+        feature: grant.feature,
+        subjectKind: grant.subjectKind,
+        subjectId: grant.subjectId,
+      });
     }
     await this.ready(session.companyId);
     await this.prisma.accessGrant.deleteMany({ where: { companyId: session.companyId } });

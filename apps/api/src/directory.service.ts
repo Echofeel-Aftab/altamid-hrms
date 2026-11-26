@@ -101,6 +101,11 @@ export class DirectoryService {
             { companyId: company.id, outletId, name: 'Sick leave', code: 'SL', paid: true, daysPerYear: 12 },
             { companyId: company.id, outletId, name: 'Earned leave', code: 'EL', paid: true, daysPerYear: 18 },
             { companyId: company.id, outletId, name: 'Unpaid leave', code: 'LWP', paid: false, daysPerYear: 0 },
+            { companyId: company.id, outletId, name: 'Comp-off', code: 'CO', paid: true, daysPerYear: 0, compOff: true },
+            { companyId: company.id, outletId, name: 'Maternity leave', code: 'ML', paid: true, daysPerYear: 182, maxInRow: 182, noticeDays: 30 },
+            { companyId: company.id, outletId, name: 'Paternity leave', code: 'PT', paid: true, daysPerYear: 15, maxInRow: 15, noticeDays: 7 },
+            { companyId: company.id, outletId, name: 'Bereavement leave', code: 'BL', paid: true, daysPerYear: 5, maxInRow: 5 },
+            { companyId: company.id, outletId, name: 'Optional leave', code: 'OL', paid: true, daysPerYear: 2, maxInRow: 1 },
           ],
         });
         await tx.announcement.create({
@@ -165,7 +170,15 @@ export class DirectoryService {
         pan: canSeePan ? pan : maskSecret(pan),
         brand: this.brand.view(company),
       },
-      licence: { mode: licence.mode, message: licence.message, reason: licence.reason },
+      licence: {
+        mode: licence.mode,
+        message: licence.message,
+        reason: licence.reason,
+        planCode: licence.planCode,
+        planName: licence.planName,
+        entitlementsMode: licence.entitlementsMode,
+        addons: licence.addons,
+      },
       access,
     };
   }
@@ -568,6 +581,7 @@ export class DirectoryService {
 
   async listPeople(session: SessionUser, query: string, department = '', status = '') {
     await this.gates.gate(session, 'people', 'You do not have access to the company directory.');
+    await this.ensureBadgeColumn();
     const powers = await this.powers(session);
     const allowed = ['active', 'onboarding', 'exited'];
     const [rows, departments] = await Promise.all([
@@ -597,6 +611,7 @@ export class DirectoryService {
           { firstName: { contains: token, mode } },
           { lastName: { contains: token, mode } },
           { code: { contains: token, mode } },
+          { deviceCode: { contains: token, mode } },
           ...(includeEmail ? [{ email: { contains: token, mode } }] : []),
           { department: { name: { contains: token, mode } } },
           { designation: { name: { contains: token, mode } } },
@@ -606,14 +621,30 @@ export class DirectoryService {
   }
 
   async getPerson(session: SessionUser, id: string) {
+    await this.ensureBadgeColumn();
     const row = await this.person(session.companyId, id);
     await this.gates.assertCanViewPerson(session, row);
     return this.present(row, session, await this.powers(session));
   }
 
+  private badgeReady: Promise<void> | null = null;
+
+  private ensureBadgeColumn(): Promise<void> {
+    if (!this.badgeReady) {
+      this.badgeReady = (async () => {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "deviceCode" TEXT`);
+        await this.prisma.$executeRawUnsafe(
+          `CREATE UNIQUE INDEX IF NOT EXISTS "Employee_companyId_deviceCode_key" ON "Employee"("companyId", "deviceCode")`,
+        ).catch(() => undefined);
+      })();
+    }
+    return this.badgeReady;
+  }
+
   async createPerson(session: SessionUser, body: unknown) {
     await this.requireHr(session);
     await this.licence.assertCanHire(session.companyId);
+    await this.ensureBadgeColumn();
     const raw = bag(body);
     const input = this.readPerson(raw, true);
     await this.assertOrg(session.companyId, input.departmentId, input.designationId, input.locationId, input.managerId);
@@ -629,6 +660,7 @@ export class DirectoryService {
     }
     if (input.signIn && !input.email) fail(400, 'Add an email before giving this person a sign-in.');
     if (input.signIn && !input.password) fail(400, 'Set a password for the new sign-in.');
+    await this.assertBadgeFree(session.companyId, input.deviceCode);
     const codes = await unscoped(() => this.prisma.employee.findMany({ where: { companyId: session.companyId }, select: { code: true } }));
     const probationMonths = (await this.settings.policy(session.companyId)).probationMonths;
     const probationEndsOn = raw.probationEndsOn !== undefined && String(raw.probationEndsOn).trim()
@@ -667,6 +699,7 @@ export class DirectoryService {
   async importPeople(session: SessionUser, body: unknown) {
     await this.requireHr(session);
     await this.licence.assertCanHire(session.companyId);
+    await this.ensureBadgeColumn();
     const input = bag(body);
     if (!Array.isArray(input.rows) || !input.rows.length) fail(400, 'The file has no rows.');
     if (input.rows.length > 500) fail(400, 'Import up to 500 people at a time.');
@@ -779,6 +812,7 @@ export class DirectoryService {
   }
 
   async updatePerson(session: SessionUser, id: string, body: unknown) {
+    await this.ensureBadgeColumn();
     const current = await this.person(session.companyId, id);
     const input = bag(body);
     if (!(await this.gates.holds(session, 'people.edit'))) {
@@ -814,6 +848,7 @@ export class DirectoryService {
     }
     if (next.status === 'exited' && current.status !== 'exited' && !next.dateOfExit) next.dateOfExit = todayInIndia();
     if (next.status !== 'exited' && current.status === 'exited') next.dateOfExit = '';
+    await this.assertBadgeFree(session.companyId, next.deviceCode, id);
     const probation = input.probationEndsOn === undefined ? {} : { probationEndsOn: String(input.probationEndsOn).trim() ? dayOfSafe(input.probationEndsOn) : '' };
     await this.prisma.employee.update({ where: { id }, data: { ...this.scalars(next), ...this.extras(input), ...probation } });
     if (next.signIn === true) {
@@ -880,6 +915,7 @@ export class DirectoryService {
       agencyId: input.agencyId,
       clientId: input.clientId,
       costCentre: input.costCentre,
+      deviceCode: input.deviceCode,
       dateOfJoining: input.dateOfJoining,
       dateOfExit: input.dateOfExit,
       confirmedOn: input.confirmedOn,
@@ -927,6 +963,7 @@ export class DirectoryService {
       locationId: optionalId(input.locationId),
       managerId: optionalId(input.managerId),
       costCentre: optional(input.costCentre, 80),
+      deviceCode: this.badgeId(input.deviceCode),
       dateOfJoining: input.dateOfJoining ? dayOfSafe(input.dateOfJoining) : creating ? todayInIndia() : fail(400, 'Date of joining is required.'),
       dateOfExit: optionalDay(input.dateOfExit),
       confirmedOn: optionalDay(input.confirmedOn),
@@ -990,6 +1027,7 @@ export class DirectoryService {
       location: row.location ? { id: row.location.id, name: row.location.name, state: row.location.state, city: row.location.city } : null,
       manager: row.manager ? { id: row.manager.id, name: `${row.manager.firstName} ${row.manager.lastName}`.trim() } : null,
       costCentre: powers.directory || powers.editor || powers.pay ? row.costCentre : '',
+      deviceCode: powers.directory || powers.editor ? (row.deviceCode || '') : '',
       dateOfJoining: row.dateOfJoining,
       dateOfExit: row.dateOfExit,
       service: this.serviceOf(row.dateOfJoining, row.dateOfExit),
@@ -1143,6 +1181,27 @@ export class DirectoryService {
     return { id: row.id, name: row.name };
   }
 
+  /** Biometric / badge id from vendor software. Blank clears the mapping. */
+  private badgeId(value: unknown): string | null {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    if (raw.length > 40) fail(400, 'Biometric / badge ID can be at most 40 characters.');
+    return raw;
+  }
+
+  private async assertBadgeFree(companyId: string, deviceCode: string | null, exceptId = ''): Promise<void> {
+    if (!deviceCode) return;
+    const clash = await this.prisma.employee.findFirst({
+      where: {
+        companyId,
+        deviceCode: { equals: deviceCode, mode: 'insensitive' },
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+      select: { code: true },
+    });
+    if (clash) fail(409, `Biometric / badge ID is already used by ${clash.code}.`);
+  }
+
   private unique(error: unknown, message: string): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') fail(409, message);
     throw error;
@@ -1171,6 +1230,7 @@ interface PersonInput {
   agencyId: string | null;
   clientId: string | null;
   costCentre: string;
+  deviceCode: string | null;
   dateOfJoining: string;
   dateOfExit: string;
   confirmedOn: string;

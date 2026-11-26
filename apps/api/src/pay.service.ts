@@ -50,11 +50,13 @@ export class PayService {
   }
 
   async mine(session: SessionUser) {
+    await this.licence.assertFeature(session.companyId, 'pay');
     if (!session.employeeId) return { person: null, structure: null, slips: [], forms: [] };
     return this.forEmployee(session, session.employeeId);
   }
 
   async forEmployee(session: SessionUser, employeeId: string) {
+    await this.licence.assertFeature(session.companyId, 'pay');
     const self = session.employeeId === employeeId;
     const desk = await this.gates.holds(session, 'pay') || await this.gates.holds(session, 'pay.structure') || await this.gates.holds(session, 'pay.slip') || await this.gates.holds(session, 'pay.form');
     if (!self && !desk) fail(403, 'You can open only your own pay.');
@@ -265,12 +267,33 @@ export class PayService {
     await this.requirePayroll(session);
     const value = this.monthOf(month);
     const { people, counts, finished } = await this.monthPeople(session.companyId, value);
-    const [structures, slips, lock] = await Promise.all([
+    const start = value + '-01';
+    const end = monthEnd(value);
+    const [structures, slips, lock, holidays, holidayWork, policy] = await Promise.all([
       this.prisma.payStructure.findMany({ where: { companyId: session.companyId, employeeId: { in: people.map((row) => row.id) }, effectiveFrom: { lte: monthEnd(value) } }, orderBy: { effectiveFrom: 'desc' } }),
       this.prisma.paySlip.findMany({ where: { companyId: session.companyId, month: value } }),
       this.prisma.payMonth.findFirst({ where: { companyId: session.companyId, month: value } }),
+      this.prisma.holiday.findMany({ where: { companyId: session.companyId, day: { gte: start, lte: end } }, select: { day: true } }),
+      this.prisma.attendanceRequest.findMany({
+        where: {
+          companyId: session.companyId,
+          kind: 'extratime',
+          status: 'approved',
+          day: { gte: start, lte: end },
+          employeeId: { in: people.map((row) => row.id) },
+        },
+        select: { employeeId: true, day: true, hours: true },
+      }),
+      this.settings.policy(session.companyId),
     ]);
+    const holidayDays = new Set(holidays.map((row) => row.day));
+    const holidayByPerson = new Map<string, number>();
+    for (const row of holidayWork) {
+      if (!holidayDays.has(row.day)) continue;
+      holidayByPerson.set(row.employeeId, (holidayByPerson.get(row.employeeId) || 0) + 1);
+    }
     const accounts = await this.settings.salaryAccounts(session.companyId);
+    const multiplier = policy.holidayWorkPayMultiplier || 1;
     const rows = people.map((person) => {
       const structure = structures.find((row) => row.employeeId === person.id);
       const slip = slips.find((row) => row.employeeId === person.id);
@@ -278,6 +301,7 @@ export class PayService {
       const lines = slip ? this.readLines(slip.linesJson) : [];
       const gross = lines.filter((line) => line.side === 'earning').reduce((sum, line) => sum + line.paise, 0);
       const deductions = lines.filter((line) => line.side === 'deduction').reduce((sum, line) => sum + line.paise, 0);
+      const holidayWorkDays = holidayByPerson.get(person.id) || 0;
       return {
         employeeId: person.id,
         code: person.code,
@@ -287,6 +311,13 @@ export class PayService {
         ctc: structure ? this.rupees(this.readLines(structure.linesJson).filter((line) => line.side !== 'deduction').reduce((sum, line) => sum + line.paise, 0)) : '',
         slip: slip ? { id: slip.id, published: slip.published, paidDays: slip.paidDays, lopDays: slip.lopDays, gross: this.rupees(gross), net: this.rupees(gross - deductions) } : null,
         suggested: days,
+        holidayWork: holidayWorkDays
+          ? {
+              days: holidayWorkDays,
+              multiplier,
+              hint: `Holiday work ×${multiplier} — add an earning line for ${holidayWorkDays} day(s)`,
+            }
+          : null,
         bankReady: Boolean(openSecret(person.bankEnc, this.key) && openSecret(person.ifscEnc, this.key)),
         payFrom: this.payerOf(accounts, person.locationId)?.id || '',
       };
@@ -295,6 +326,7 @@ export class PayService {
       month: value,
       label: this.monthLabel(value),
       finished,
+      holidayPayMultiplier: multiplier,
       locked: lock ? { at: lock.lockedAt.toISOString(), by: lock.lockedBy } : null,
       rows,
       accounts: accounts.map((row) => ({

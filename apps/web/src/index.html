@@ -19,6 +19,8 @@
         if (localStorage.getItem('altamid_hrms_sidebar') === '1' && window.matchMedia('(min-width: 992px)').matches) {
           document.documentElement.classList.add('sidebar-collapsed');
         }
+        var pack = localStorage.getItem('altamid_hrms_desk_pack') === 'classic' ? 'classic' : 'masonry';
+        document.documentElement.classList.add('desk-pack-' + pack);
       } catch (e) {}
     </script>
   </head>

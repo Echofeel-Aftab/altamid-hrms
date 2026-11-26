@@ -159,6 +159,12 @@ export interface PeoplePolicy {
   prorateLeave: boolean;
   compOffFullHours: number;
   compOffHalfHours: number;
+  /** When approved extra time falls on a company holiday, credit fixed comp-off days. */
+  holidayWorkEarnsCompOff: boolean;
+  /** Comp-off days credited per approved holiday-work day (0.5 or 1). */
+  holidayWorkCompOffDays: number;
+  /** Payroll guidance multiplier for holiday work (1 / 1.5 / 2). Does not auto-calculate tax. */
+  holidayWorkPayMultiplier: number;
   autoExit: boolean;
   /** Off by default. When on, a year's leave quota is earned month by month instead of all in January. */
   monthlyAccrual: boolean;
@@ -211,6 +217,9 @@ export function defaultPolicy(): PeoplePolicy {
     prorateLeave: true,
     compOffFullHours: 8,
     compOffHalfHours: 4,
+    holidayWorkEarnsCompOff: true,
+    holidayWorkCompOffDays: 1,
+    holidayWorkPayMultiplier: 2,
     autoExit: true,
     monthlyAccrual: false,
     reminders: { probation: true, approvals: true, approvalHours: 48, checkout: true, warranty: true, celebrations: true, hiringSla: false, hiringSlaDays: 7, latePunch: false },
@@ -413,8 +422,14 @@ export class SettingsService {
     else if (section === 'statutory') this.saveStatutory(input, stored);
     else if (section === 'attendance') this.saveAttendance(input, stored);
     else if (section === 'templates') this.saveTemplates(input, stored);
-    else if (section === 'integration') issuedKey = this.saveConnection(input, stored);
-    else if (section === 'ai') this.saveAi(input, stored);
+    else if (section === 'integration') {
+      if (String(input.key || '') === 'api') await this.gates.gate(session, 'api');
+      issuedKey = this.saveConnection(input, stored);
+    }
+    else if (section === 'ai') {
+      await this.gates.gate(session, 'ai');
+      this.saveAi(input, stored);
+    }
     else if (section === 'test') await this.runTest(session, input, stored);
     else if (section === 'geofence') await this.saveGeofence(session, input);
     else fail(400, 'That settings section is not available.');
@@ -500,6 +515,19 @@ export class SettingsService {
       prorateLeave: on(input.prorateLeave, current.prorateLeave),
       compOffFullHours: whole(input.compOffFullHours, current.compOffFullHours, 'Hours for a full comp-off day', 1, 12),
       compOffHalfHours: whole(input.compOffHalfHours, current.compOffHalfHours, 'Hours for a half comp-off day', 1, 12),
+      holidayWorkEarnsCompOff: on(input.holidayWorkEarnsCompOff, current.holidayWorkEarnsCompOff),
+      holidayWorkCompOffDays: (() => {
+        if (input.holidayWorkCompOffDays === undefined) return current.holidayWorkCompOffDays;
+        const number = Number(input.holidayWorkCompOffDays);
+        if (number !== 0.5 && number !== 1) fail(400, 'Holiday comp-off days must be 0.5 or 1.');
+        return number;
+      })(),
+      holidayWorkPayMultiplier: (() => {
+        if (input.holidayWorkPayMultiplier === undefined) return current.holidayWorkPayMultiplier;
+        const number = Number(input.holidayWorkPayMultiplier);
+        if (![1, 1.5, 2].includes(number)) fail(400, 'Holiday pay multiplier must be 1, 1.5, or 2.');
+        return number;
+      })(),
       autoExit: on(input.autoExit, current.autoExit),
       monthlyAccrual: on(input.monthlyAccrual, current.monthlyAccrual),
       reminders: {
@@ -618,6 +646,15 @@ export class SettingsService {
       prorateLeave: flag(policy.prorateLeave, fallback.prorateLeave),
       compOffFullHours: this.whole(policy.compOffFullHours, fallback.compOffFullHours, 12) || fallback.compOffFullHours,
       compOffHalfHours: this.whole(policy.compOffHalfHours, fallback.compOffHalfHours, 12) || fallback.compOffHalfHours,
+      holidayWorkEarnsCompOff: flag(policy.holidayWorkEarnsCompOff, fallback.holidayWorkEarnsCompOff),
+      holidayWorkCompOffDays: (() => {
+        const number = Number(policy.holidayWorkCompOffDays);
+        return number === 0.5 || number === 1 ? number : fallback.holidayWorkCompOffDays;
+      })(),
+      holidayWorkPayMultiplier: (() => {
+        const number = Number(policy.holidayWorkPayMultiplier);
+        return [1, 1.5, 2].includes(number) ? number : fallback.holidayWorkPayMultiplier;
+      })(),
       autoExit: flag(policy.autoExit, fallback.autoExit),
       monthlyAccrual: flag(policy.monthlyAccrual, fallback.monthlyAccrual),
       reminders: {

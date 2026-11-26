@@ -196,6 +196,8 @@ model Employee {
   outletId          String?
   company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   code              String
+  /// Badge / biometric user id from the vendor software. Matched before EMP code on punch ingest.
+  deviceCode        String?
   firstName         String
   lastName          String
   email             String           @default("")

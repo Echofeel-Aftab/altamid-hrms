@@ -14,6 +14,7 @@ interface Preview {
 
 const COLUMNS: Array<[string, string]> = [
   ['code', 'Employee code'],
+  ['deviceCode', 'Biometric / badge ID'],
   ['firstName', 'First name'],
   ['lastName', 'Last name'],
   ['email', 'Email'],

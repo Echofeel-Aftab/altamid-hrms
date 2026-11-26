@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AccessService } from './access.service';
 import { bag, fail, optional, text } from './http';
+import { LicenceService } from './licence.service';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
 
@@ -37,10 +38,12 @@ export class GrowthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gates: AccessService,
+    private readonly licence: LicenceService,
   ) {}
 
   /** The signed-in person's growth, or a person their manager or HR may publish for. */
   async view(session: SessionUser, personId: string) {
+    await this.licence.assertFeature(session.companyId, 'performance');
     const people = await this.choices(session);
     const id = personId || session.employeeId || '';
     const suggestedYear = this.yearNow();
