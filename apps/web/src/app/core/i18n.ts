@@ -9,12 +9,13 @@ export interface LanguageChoice {
 export const LANGUAGES: LanguageChoice[] = [
   { id: 'en', native: 'English', name: 'English' },
   { id: 'hi', native: 'हिन्दी', name: 'Hindi' },
+  { id: 'ur', native: 'اردو', name: 'Urdu' },
+  { id: 'es', native: 'Español', name: 'Spanish' },
   { id: 'kn', native: 'ಕನ್ನಡ', name: 'Kannada' },
   { id: 'ta', native: 'தமிழ்', name: 'Tamil' },
   { id: 'gu', native: 'ગુજરાતી', name: 'Gujarati' },
   { id: 'bn', native: 'বাংলা', name: 'Bengali' },
   { id: 'ar', native: 'العربية', name: 'Arabic' },
-  { id: 'es', native: 'Español', name: 'Spanish' },
   { id: 'fr', native: 'Français', name: 'French' },
   { id: 'he', native: 'עברית', name: 'Hebrew' },
 ];
@@ -26,6 +27,11 @@ const packs: Record<string, Record<string, string>> = {
     'My day': 'मेरा दिन', Home: 'होम', Attendance: 'हाजिरी', Exceptions: 'अपवाद', Leave: 'छुट्टी', Announcements: 'घोषणाएँ', Requests: 'अनुरोध', Recognition: 'सम्मान', Jobs: 'नौकरियाँ', Library: 'पुस्तकालय', 'My pay': 'मेरा वेतन', 'My team': 'मेरी टीम', Approvals: 'स्वीकृतियाँ', Company: 'कंपनी', People: 'लोग', Hiring: 'भर्ती', Organisation: 'संगठन', Payroll: 'पेरोल', Settings: 'सेटिंग्स',
     'Search anything in HRMS...': 'HRMS में कुछ भी खोजें...', 'Nothing matches that search.': 'इस खोज से कुछ नहीं मिला।', Notifications: 'सूचनाएँ', 'Mark all read': 'सब पढ़ा हुआ', 'View all': 'सभी देखें', 'No notifications': 'कोई सूचना नहीं', Expand: 'खोलें', Collapse: 'समेटें', Language: 'भाषा', All: 'सभी', Waiting: 'प्रतीक्षा', News: 'समाचार', Badges: 'बैज', 'No pending actions exist for you.': 'आपके लिए कोई लंबित कार्य नहीं है।',
     'Back to people': 'लोगों पर वापस', Joined: 'शामिल हुए', 'Total service': 'कुल सेवा', Manager: 'प्रबंधक', Status: 'स्थिति', Personal: 'व्यक्तिगत', Contact: 'संपर्क', 'Date of birth': 'जन्म तिथि', Gender: 'लिंग', 'Marital status': 'वैवाहिक स्थिति', Nationality: 'राष्ट्रीयता', 'Blood group': 'रक्त समूह', Confirmed: 'पुष्टि', 'Emergency contact': 'आपातकालीन संपर्क', 'Emergency phone': 'आपातकालीन फ़ोन', Address: 'पता', 'Not added': 'जोड़ा नहीं', 'Your details': 'आपका विवरण', Save: 'सहेजें', Email: 'ईमेल', Phone: 'फ़ोन', Location: 'स्थान', Worker: 'कर्मचारी प्रकार',
+  },
+  ur: {
+    'My day': 'میرا دن', Home: 'ہوم', Attendance: 'حاضری', Exceptions: 'استثنات', Leave: 'چھٹی', Announcements: 'اعلانات', Requests: 'درخواستیں', Recognition: 'شناخت', Jobs: 'نوکریاں', Library: 'لائبریری', 'My pay': 'میری تنخواہ', 'My team': 'میری ٹیم', Approvals: 'منظوریاں', Company: 'کمپنی', People: 'افراد', Hiring: 'بھرتی', Organisation: 'ادارہ', Payroll: 'پے رول', Settings: 'ترتیبات',
+    'Search anything in HRMS...': 'HRMS میں کچھ بھی تلاش کریں...', 'Nothing matches that search.': 'کوئی نتیجہ نہیں ملا۔', Notifications: 'اطلاعات', 'Mark all read': 'سب پڑھا ہوا', 'View all': 'سب دیکھیں', 'No notifications': 'کوئی اطلاع نہیں', Expand: 'کھولیں', Collapse: 'سمیٹیں', Language: 'زبان', All: 'سب', Waiting: 'انتظار', News: 'خبریں', Badges: 'بیجز', 'No pending actions exist for you.': 'آپ کے لیے کوئی زیر کارروائی نہیں۔',
+    'Back to people': 'افراد پر واپس', Joined: 'شمولیت', 'Total service': 'کل خدمت', Manager: 'مینجر', Status: 'حیثیت', Personal: 'ذاتی', Contact: 'رابطہ', 'Date of birth': 'تاریخ پیدائش', Gender: 'جنس', 'Marital status': 'ازدواجی حیثیت', Nationality: 'قومیت', 'Blood group': 'بلڈ گروپ', Confirmed: 'تصدیق', 'Emergency contact': 'ہنگامی رابطہ', 'Emergency phone': 'ہنگامی فون', Address: 'پتہ', 'Not added': 'شامل نہیں', 'Your details': 'آپ کی تفصیل', Save: 'محفوظ کریں', Email: 'ای میل', Phone: 'فون', Location: 'مقام', Worker: 'ملازم کی قسم',
   },
   kn: {
     'My day': 'ನನ್ನ ದಿನ', Home: 'ಮುಖಪುಟ', Attendance: 'ಹಾಜರಾತಿ', Exceptions: 'ವಿನಾಯಿತಿಗಳು', Leave: 'ರಜೆ', Announcements: 'ಪ್ರಕಟಣೆಗಳು', Requests: 'ವಿನಂತಿಗಳು', Recognition: 'ಗೌರವ', Jobs: 'ಉದ್ಯೋಗಗಳು', Library: 'ಗ್ರಂಥಾಲಯ', 'My pay': 'ನನ್ನ ವೇತನ', 'My team': 'ನನ್ನ ತಂಡ', Approvals: 'ಅನುಮೋದನೆಗಳು', Company: 'ಕಂಪನಿ', People: 'ಜನರು', Hiring: 'ನೇಮಕಾತಿ', Organisation: 'ಸಂಸ್ಥೆ', Payroll: 'ವೇತನ', Settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
