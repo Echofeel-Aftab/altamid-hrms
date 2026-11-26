@@ -37,6 +37,32 @@ export class PublicController {
     return this.auth.login(emailOf(input.email), loginPassword(input.password), this.ip(request));
   }
 
+  @Post('auth/mfa/verify')
+  mfaVerify(@Req() request: Request, @Body() body: unknown) {
+    const input = bag(body);
+    return this.auth.verifyMfa(String(input.ticket || ''), String(input.code || ''), this.ip(request));
+  }
+
+  @Post('auth/otp/start')
+  otpStart(@Req() request: Request, @Body() body: unknown) {
+    const input = bag(body);
+    const channel = String(input.channel || 'email') === 'sms' ? 'sms' : 'email';
+    const identity = channel === 'email'
+      ? emailOf(input.identity ?? input.email)
+      : String(input.identity ?? input.phone ?? '').trim();
+    return this.auth.otpStart(channel, identity, this.ip(request));
+  }
+
+  @Post('auth/otp/verify')
+  otpVerify(@Req() request: Request, @Body() body: unknown) {
+    const input = bag(body);
+    const channel = String(input.channel || 'email') === 'sms' ? 'sms' : 'email';
+    const identity = channel === 'email'
+      ? emailOf(input.identity ?? input.email)
+      : String(input.identity ?? input.phone ?? '').trim();
+    return this.auth.otpVerify(channel, identity, String(input.code || ''), this.ip(request));
+  }
+
   @Post('auth/forgot')
   forgot(@Req() request: Request, @Body() body: unknown) {
     return this.auth.forgot(emailOf(bag(body).email), this.ip(request));

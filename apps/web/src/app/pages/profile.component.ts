@@ -8,6 +8,7 @@ import { squarePhoto } from '../core/photo';
 import { PhotoComponent } from '../shared/photo.component';
 import { MyDetailsComponent } from './my-details.component';
 import { AccessPanelComponent } from './access-panel.component';
+import { ProfileSecurityComponent } from './profile-security.component';
 
 interface PersonCard {
   id: string;
@@ -36,7 +37,7 @@ interface AssetRow { id: string; name: string; tag: string; kind: string; kindLa
 
 @Component({
   selector: 'app-profile',
-  imports: [RouterLink, FormsModule, AccessPanelComponent, PhotoComponent, MyDetailsComponent],
+  imports: [RouterLink, FormsModule, AccessPanelComponent, PhotoComponent, MyDetailsComponent, ProfileSecurityComponent],
   template: `
     <div class="page-head">
       <div>
@@ -96,6 +97,7 @@ interface AssetRow { id: string; name: string; tag: string; kind: string; kindLa
           </div>
           <div class="p-hero-actions">
             <button type="button" class="btn btn-secondary" (click)="tab = 'details'"><i class="bi bi-pencil-square"></i> Update my details</button>
+            <button type="button" class="btn btn-ghost" (click)="tab = 'security'"><i class="bi bi-shield-lock"></i> Security</button>
             <a class="btn btn-ghost" routerLink="/settings" [queryParams]="{ tab: 'password' }"><i class="bi bi-key"></i> Password</a>
             <a class="btn btn-primary" [routerLink]="'/people/' + person.id"><i class="bi bi-person-vcard"></i> Open dossier</a>
           </div>
@@ -251,6 +253,9 @@ interface AssetRow { id: string; name: string; tag: string; kind: string; kindLa
             @case ('access') {
               <app-access-panel [employeeId]="person.id" />
             }
+            @case ('security') {
+              <app-profile-security />
+            }
             @case ('work') {
               @if (tasks.length) {
                 <section class="card">
@@ -320,6 +325,7 @@ export class ProfileComponent implements OnInit {
     { id: 'requests', label: 'My requests', icon: 'bi bi-inbox' },
     { id: 'assets', label: 'My assets', icon: 'bi bi-laptop' },
     { id: 'access', label: 'Access', icon: 'bi bi-shield-check' },
+    { id: 'security', label: 'Security', icon: 'bi bi-shield-lock' },
     { id: 'work', label: 'Work', icon: 'bi bi-box-arrow-right' },
   ];
   tab = 'about';

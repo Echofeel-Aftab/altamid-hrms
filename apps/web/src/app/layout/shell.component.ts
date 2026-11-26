@@ -2,6 +2,7 @@ import { PhotoComponent } from '../shared/photo.component';
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { SessionIdleService } from '../core/session-idle.service';
 import { SessionStore } from '../core/session.store';
 import { I18n } from '../core/i18n';
 import { isDarkTheme, setDarkTheme } from '../core/theme';
@@ -293,6 +294,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   readonly store = inject(SessionStore);
   readonly i18n = inject(I18n);
   private readonly api = inject(ApiService);
+  private readonly idle = inject(SessionIdleService);
   private readonly router = inject(Router);
   open = false;
   userOpen = false;
@@ -324,6 +326,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   launchQuery = '';
 
   ngOnInit(): void {
+    this.idle.start();
     void this.loadPins();
     this.collapsed = localStorage.getItem(SIDEBAR_KEY) === '1' && window.matchMedia('(min-width: 992px)').matches;
     this.applySidebar();
@@ -337,6 +340,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.idle.stop();
     window.clearInterval(this.timer);
     window.clearInterval(this.weatherTimer);
     window.clearTimeout(this.navScrollTimer);
@@ -539,7 +543,10 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.flyout = '';
   }
 
-  signOut(): void {
+  async signOut(): Promise<void> {
+    try {
+      await this.api.post('/v1/auth/logout', {});
+    } catch { /* still clear local session */ }
     this.api.setToken('');
     this.store.clear();
     void this.router.navigateByUrl('/login');

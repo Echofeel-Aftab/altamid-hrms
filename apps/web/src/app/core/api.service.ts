@@ -4,6 +4,16 @@ const TOKEN_KEY = 'altamid_hrms_token';
 const OUTLET_KEY = 'altamid_hrms_outlet';
 const UNREACHABLE = 'Cannot reach the HRMS server right now. It may be restarting. Refresh in a few seconds.';
 
+const PUBLIC_AUTH = new Set([
+  '/v1/auth/login',
+  '/v1/auth/mfa/verify',
+  '/v1/auth/otp/start',
+  '/v1/auth/otp/verify',
+  '/v1/auth/forgot',
+  '/v1/auth/reset',
+  '/v1/start',
+]);
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -15,6 +25,8 @@ export class ApiService {
   token = '';
   /** The outlet sent with every request, or "all" for a master viewing every outlet. Empty until one is chosen. */
   outlet = '';
+  /** Fired when setToken changes storage (used for cross-tab BroadcastChannel). */
+  onAuthChange: ((token: string) => void) | null = null;
   private readonly inflight = new Map<string, Promise<unknown>>();
   private readonly recent = new Map<string, { at: number; data: unknown }>();
 
@@ -23,7 +35,21 @@ export class ApiService {
     this.outlet = typeof localStorage === 'undefined' ? '' : localStorage.getItem(OUTLET_KEY) || '';
   }
 
-  setToken(token: string): void {
+  setToken(token: string, opts?: { silent?: boolean }): void {
+    this.token = token;
+    this.inflight.clear();
+    this.recent.clear();
+    if (typeof localStorage === 'undefined') return;
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else {
+      localStorage.removeItem(TOKEN_KEY);
+      this.setOutlet('');
+    }
+    if (!opts?.silent) this.onAuthChange?.(token);
+  }
+
+  /** Apply a token from another tab without re-broadcasting. */
+  applyRemoteToken(token: string): void {
     this.token = token;
     this.inflight.clear();
     this.recent.clear();
@@ -96,7 +122,7 @@ export class ApiService {
         ? `The server could not finish that (error ${response.status}). Try again. If it keeps happening, tell your admin.`
         : 'That did not work. Check the details and try again.';
       const message = typeof data.message === 'string' ? data.message : fallback;
-      if (response.status === 401 && path !== '/v1/auth/login' && path !== '/v1/start') this.setToken('');
+      if (response.status === 401 && !PUBLIC_AUTH.has(path)) this.setToken('');
       throw new ApiError(message, response.status);
     }
     return data as T;

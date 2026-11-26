@@ -741,6 +741,36 @@ export class HrmsController {
     return this.auth.changePassword(request.session, String(input.current ?? ''), String(input.next ?? ''));
   }
 
+  @Post('auth/touch')
+  touch(@Req() request: RequestWithSession) {
+    return this.auth.touch(request.session, request.headers.authorization);
+  }
+
+  @Post('auth/logout')
+  logout(@Req() request: RequestWithSession) {
+    return this.auth.logout(request.session);
+  }
+
+  @Get('auth/mfa')
+  mfaStatus(@Req() request: RequestWithSession) {
+    return this.auth.mfaStatus(request.session);
+  }
+
+  @Post('auth/mfa/setup')
+  mfaSetup(@Req() request: RequestWithSession) {
+    return this.auth.mfaSetup(request.session);
+  }
+
+  @Post('auth/mfa/enable')
+  mfaEnable(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.auth.mfaEnable(request.session, body);
+  }
+
+  @Post('auth/mfa/disable')
+  mfaDisable(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.auth.mfaDisable(request.session, body);
+  }
+
   @Get('org')
   org(@Req() request: RequestWithSession) {
     return this.directory.org(request.session);

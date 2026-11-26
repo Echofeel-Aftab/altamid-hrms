@@ -80,22 +80,33 @@ model Company {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  companyId    String
-  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         String
-  active       Boolean   @default(true)
-  failedCount  Int       @default(0)
-  lockedUntil  DateTime?
-  badgeSeenAt  DateTime?
-  employeeId   String?   @unique
-  master       Boolean   @default(false)
-  pinsJson     String    @default("[]")
-  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(cuid())
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email          String    @unique
+  passwordHash   String
+  name           String
+  role           String
+  active         Boolean   @default(true)
+  failedCount    Int       @default(0)
+  lockedUntil    DateTime?
+  badgeSeenAt    DateTime?
+  employeeId     String?   @unique
+  master         Boolean   @default(false)
+  pinsJson       String    @default("[]")
+  /// Google Authenticator (TOTP). Secret is sealed; backup codes are hashed.
+  totpEnabled    Boolean   @default(false)
+  totpSecretEnc  String    @default("")
+  totpBackupJson String    @default("[]")
+  /// SHA-256 of the current session id claim; empty means any valid JWT is accepted until next login.
+  sessionHash    String    @default("")
+  /// One-time login code (hashed) for email/SMS OTP sign-in.
+  otpHash        String    @default("")
+  otpExpiresAt   DateTime?
+  otpChannel     String    @default("")
+  otpAttempts    Int       @default(0)
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
 
   @@index([companyId])
 }
