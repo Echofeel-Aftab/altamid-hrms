@@ -329,28 +329,74 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                   }
                   @case ('approvals') {
                     @if (canApprovals()) {
-                      <a class="home-tile" routerLink="/approvals">
-                        <span class="home-tile-ico is-gold"><i class="bi bi-hourglass-split"></i></span>
-                        <small>Waiting on you</small>
-                        <strong>{{ data.pending }}</strong>
-                        <span>{{ data.pending === 1 ? 'Request needs' : 'Requests need' }} a decision</span>
+                      <a class="home-panel" routerLink="/approvals">
+                        <div class="home-panel-top">
+                          <span class="home-panel-ico"><i class="bi bi-hourglass-split"></i></span>
+                          <div>
+                            <small>Waiting on you</small>
+                            <span class="home-panel-cta">Open approvals <i class="bi bi-arrow-right"></i></span>
+                          </div>
+                        </div>
+                        <div class="home-panel-hero">
+                          <strong>{{ data.pending }}</strong>
+                          <p>{{ data.pending === 1 ? 'Request needs a decision' : data.pending ? 'Requests need a decision' : 'Nothing waiting right now' }}</p>
+                        </div>
+                        <div class="home-panel-foot">
+                          @if (data.peopleWatch; as watch) {
+                            <span><b>{{ watch.exitRequests }}</b> resignations</span>
+                            <span><b>{{ watch.detailChanges }}</b> detail changes</span>
+                          } @else {
+                            <span>Leave, attendance, and resignations</span>
+                            <span>{{ data.pending ? 'Review the inbox' : 'You are clear' }}</span>
+                          }
+                        </div>
                       </a>
                     }
                   }
                   @case ('month-tally') {
-                    <a class="home-tile" routerLink="/attendance">
-                      <span class="home-tile-ico is-ok"><i class="bi bi-calendar-check"></i></span>
-                      <small>This month · {{ monthShort() }}</small>
-                      <strong>{{ tally('present') + tally('onduty') }}<em> present</em></strong>
-                      <span>{{ tally('absent') }} absent · {{ tally('leave') }} on leave{{ tally('missed') ? ' · ' + tally('missed') + ' missed' : '' }}</span>
+                    <a class="home-panel" routerLink="/attendance">
+                      <div class="home-panel-top">
+                        <span class="home-panel-ico"><i class="bi bi-calendar-check"></i></span>
+                        <div>
+                          <small>This month · {{ monthShort() }}</small>
+                          <span class="home-panel-cta">Open attendance <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                      </div>
+                      <div class="home-panel-hero">
+                        <strong>{{ tally('present') + tally('onduty') }}<em> present</em></strong>
+                        <p>{{ monthDaysLogged() }} of {{ data.days.length }} working days logged</p>
+                      </div>
+                      <div class="home-panel-mix" role="img" [attr.aria-label]="monthMixLabel()">
+                        @if (monthShare('present')) { <span class="is-present" [style.flex-grow]="monthShare('present')"></span> }
+                        @if (monthShare('leave')) { <span class="is-leave" [style.flex-grow]="monthShare('leave')"></span> }
+                        @if (monthShare('absent')) { <span class="is-absent" [style.flex-grow]="monthShare('absent')"></span> }
+                        @if (monthShare('missed')) { <span class="is-missed" [style.flex-grow]="monthShare('missed')"></span> }
+                      </div>
+                      <div class="home-panel-foot is-grid">
+                        <span><b>{{ tally('present') + tally('onduty') }}</b> present</span>
+                        <span><b>{{ tally('leave') }}</b> leave</span>
+                        <span><b>{{ tally('absent') }}</b> absent</span>
+                        <span><b>{{ tally('missed') }}</b> missed</span>
+                      </div>
                     </a>
                   }
                   @case ('my-pay') {
-                    <a class="home-tile" routerLink="/pay">
-                      <span class="home-tile-ico is-gold"><i class="bi bi-wallet2"></i></span>
-                      <small>Net pay · {{ data.myPay!.label }}</small>
-                      <strong>{{ data.myPay!.net }}</strong>
-                      <span>{{ data.myPay!.paidDays }} paid {{ data.myPay!.paidDays === 1 ? 'day' : 'days' }} · Open payslip</span>
+                    <a class="home-panel" routerLink="/pay">
+                      <div class="home-panel-top">
+                        <span class="home-panel-ico"><i class="bi bi-wallet2"></i></span>
+                        <div>
+                          <small>Net pay · {{ data.myPay!.label }}</small>
+                          <span class="home-panel-cta">Open payslip <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                      </div>
+                      <div class="home-panel-hero">
+                        <strong>{{ data.myPay!.net }}</strong>
+                        <p>{{ data.myPay!.paidDays }} paid {{ data.myPay!.paidDays === 1 ? 'day' : 'days' }} in this slip</p>
+                      </div>
+                      <div class="home-panel-foot">
+                        <span>Published by payroll</span>
+                        <span>View breakup</span>
+                      </div>
                     </a>
                   }
                   @case ('company-today') {
@@ -1229,6 +1275,24 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   tally(status: string): number {
     return this.data?.days.filter((day) => day.status === status).length || 0;
+  }
+
+  monthShare(status: string): number {
+    if (status === 'present') return this.tally('present') + this.tally('onduty');
+    return this.tally(status);
+  }
+
+  monthDaysLogged(): number {
+    return this.monthShare('present') + this.monthShare('leave') + this.monthShare('absent') + this.monthShare('missed');
+  }
+
+  monthMixLabel(): string {
+    return [
+      `${this.monthShare('present')} present`,
+      `${this.monthShare('leave')} leave`,
+      `${this.monthShare('absent')} absent`,
+      `${this.monthShare('missed')} missed`,
+    ].join(', ');
   }
 
   monthLabel(): string {
