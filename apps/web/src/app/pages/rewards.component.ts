@@ -35,70 +35,123 @@ const KIND_LABEL: Record<Kind, string> = { insurance: 'Insurance', wellness: 'We
         <span class="page-mark" aria-hidden="true"><i class="bi bi-gift"></i></span>
         <p class="eyebrow">My pay</p>
         <h1>Total rewards</h1>
-        <p class="lede">Everything you get for your work in one view: cash pay, what the company pays for you, benefits and paid time off.</p>
+        <p class="lede">Cash pay, company contributions, benefits and paid time off — the full picture of what you earn.</p>
       </div>
-      @if (view?.statement) { <button type="button" class="btn btn-gold" (click)="download()" [disabled]="busy"><i class="bi bi-file-earmark-pdf"></i> Statement PDF</button> }
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
-    @if (view?.canDesk) {
-      <div class="mx-tabs-row">
-        <div class="seg-mini mx-tabs" role="tablist">
-          <button type="button" role="tab" [class.is-active]="tab === 'statement'" (click)="tab = 'statement'"><i class="bi bi-receipt"></i> Statement</button>
-          <button type="button" role="tab" [class.is-active]="tab === 'setup'" (click)="openSetup()"><i class="bi bi-gear"></i> Benefits setup</button>
-        </div>
-        @if (tab === 'statement') {
-          <select [ngModel]="personId" (ngModelChange)="pick($event)" aria-label="Show the statement for">
-            <option value="">My statement</option>
-            @for (person of view!.people; track person.id) { <option [value]="person.id">{{ person.name }} · {{ person.code }}</option> }
-          </select>
+
+    @if (view) {
+      <div class="rw-rail">
+        @if (view.canDesk) {
+          <div class="seg-mini mx-tabs" role="tablist">
+            <button type="button" role="tab" [class.is-active]="tab === 'statement'" (click)="tab = 'statement'"><i class="bi bi-receipt"></i> Statement</button>
+            <button type="button" role="tab" [class.is-active]="tab === 'setup'" (click)="openSetup()"><i class="bi bi-gear"></i> Benefits setup</button>
+          </div>
+        } @else {
+          <span class="rw-rail-label"><i class="bi bi-receipt"></i> Your statement</span>
         }
+        <div class="rw-rail-actions">
+          @if (view.canDesk && tab === 'statement') {
+            <label class="rw-who">
+              <span>Person</span>
+              <select [ngModel]="personId" (ngModelChange)="pick($event)" aria-label="Show the statement for">
+                <option value="">My statement</option>
+                @for (person of view.people; track person.id) { <option [value]="person.id">{{ person.name }} · {{ person.code }}</option> }
+              </select>
+            </label>
+          }
+          @if (tab === 'statement' && view.statement) {
+            <button type="button" class="btn btn-gold" (click)="download()" [disabled]="busy"><i class="bi bi-file-earmark-pdf"></i> Statement PDF</button>
+          }
+        </div>
       </div>
     }
 
     @if (view && tab === 'statement') {
       @if (view.statement; as s) {
-        <section class="card mx-hero">
-          <div>
-            <small>Total rewards · FY {{ s.year }}</small>
-            <strong>{{ money(s.total) }}</strong>
-            <p>{{ s.person.name }} · {{ s.person.designation || 'Team member' }}@if (s.person.department) { · {{ s.person.department }} }</p>
+        <section class="rw-hero" aria-labelledby="rw-total">
+          <div class="rw-hero-top">
+            <div class="rw-identity">
+              <span class="rw-avatar" aria-hidden="true">{{ initials(s.person.name) }}</span>
+              <div>
+                <p class="rw-kicker">Total rewards · FY {{ s.year }}</p>
+                <h2 id="rw-total" class="rw-total">{{ money(s.total) }}</h2>
+                <p class="rw-person">{{ s.person.name }} · {{ s.person.code }}</p>
+                <p class="rw-role">{{ s.person.designation || 'Team member' }}@if (s.person.department) { · {{ s.person.department }} }</p>
+              </div>
+            </div>
+            <div class="rw-metrics">
+              <article class="rw-metric">
+                <small>CTC</small>
+                <strong>{{ money(s.ctc) }}</strong>
+                @if (s.effectiveFrom) { <span>since {{ day(s.effectiveFrom) }}</span> }
+              </article>
+              @if (s.growth) {
+                <article class="rw-metric">
+                  <small>Growth</small>
+                  <strong class="is-up"><i class="bi bi-arrow-up-right"></i> {{ s.growth.percent }}%</strong>
+                  <span>from {{ money(s.growth.from) }}</span>
+                </article>
+              }
+              <article class="rw-metric">
+                <small>Recognitions</small>
+                <strong><i class="bi bi-award"></i> {{ s.recognition }}</strong>
+                <span>this year</span>
+              </article>
+            </div>
           </div>
-          <div class="mx-hero-side">
-            <div><small>CTC</small><b>{{ money(s.ctc) }}</b>@if (s.effectiveFrom) { <small>since {{ day(s.effectiveFrom) }}</small> }</div>
-            @if (s.growth) { <div><small>Growth</small><b class="mx-up"><i class="bi bi-arrow-up-right"></i> {{ s.growth.percent }}%</b><small>from {{ money(s.growth.from) }} in {{ day(s.growth.since) }}</small></div> }
-            <div><small>Recognitions</small><b><i class="bi bi-award"></i> {{ s.recognition }}</b><small>this year</small></div>
-          </div>
+          @if (s.total) {
+            <div class="rw-mix">
+              <div class="rw-stack" role="img" [attr.aria-label]="stackLabel(s)">
+                @for (block of counted(s); track block.key) {
+                  @if (block.total) {
+                    <span [class]="'rw-stack-part ' + look(block.key).tone" [style.flex-grow]="block.total" [title]="block.label + ': ' + money(block.total)"></span>
+                  }
+                }
+              </div>
+              <ul class="rw-legend">
+                @for (block of counted(s); track block.key) {
+                  @if (block.total) {
+                    <li>
+                      <i [class]="'rw-dot ' + look(block.key).tone"></i>
+                      <span>{{ block.label }}</span>
+                      <b>{{ percent(block.total, s.total) }}%</b>
+                      <em>{{ money(block.total) }}</em>
+                    </li>
+                  }
+                }
+              </ul>
+            </div>
+          }
         </section>
-        @if (s.total) {
-          <div class="mx-stack" role="img" [attr.aria-label]="stackLabel(s)">
-            @for (block of counted(s); track block.key) {
-              @if (block.total) { <span [class]="'mx-stack-part ' + look(block.key).tone" [style.flex-grow]="block.total" [title]="block.label + ': ' + money(block.total)"></span> }
-            }
-          </div>
-          <div class="mx-legend">
-            @for (block of counted(s); track block.key) {
-              @if (block.total) { <span><i [class]="'mx-dot ' + look(block.key).tone"></i> {{ block.label }} · {{ percent(block.total, s.total) }}%</span> }
-            }
-          </div>
-        }
-        <div class="mx-blocks">
+
+        <div class="rw-blocks">
           @for (block of s.blocks; track block.key) {
             @if (block.lines.length || block.total) {
-              <section class="card mx-block">
-                <div class="card-head">
-                  <h2><span [class]="'mx-block-ico ' + look(block.key).tone"><i class="bi" [class]="look(block.key).icon"></i></span> {{ block.label }}</h2>
-                  <strong>{{ block.total ? money(block.total) : '' }}</strong>
-                </div>
-                <p class="muted mx-fine">{{ block.hint }}@if (block.key === 'time') { · shown for information, not added to the total }</p>
+              <section [class]="'rw-block ' + look(block.key).tone + (block.key === 'cash' ? ' is-lead' : '') + (block.key === 'time' ? ' is-aside' : '')">
+                <header class="rw-block-head">
+                  <span class="rw-block-ico" aria-hidden="true"><i class="bi" [class]="look(block.key).icon"></i></span>
+                  <div>
+                    <h3>{{ block.label }}</h3>
+                    <p>{{ block.hint }}@if (block.key === 'time') { · for information only }</p>
+                  </div>
+                  @if (block.total) { <strong>{{ money(block.total) }}</strong> }
+                </header>
                 @if (block.lines.length) {
-                  <ul class="mx-lines">
+                  <ul class="rw-lines">
                     @for (line of block.lines; track $index) {
-                      <li><span>{{ line.label }}@if (line.hint) { <small>{{ line.hint }}</small> }</span><b>{{ line.amount ? money(line.amount) : line.text || 'Included' }}</b></li>
+                      <li>
+                        <span>
+                          {{ line.label }}
+                          @if (line.hint) { <small>{{ line.hint }}</small> }
+                        </span>
+                        <b [class.is-soft]="!line.amount">{{ line.amount ? money(line.amount) : line.text || 'Included' }}</b>
+                      </li>
                     }
                   </ul>
                 }
                 @if (block.key === 'cash' && s.flex.length) {
-                  <p class="mx-fine muted mx-row-gap"><i class="bi bi-sliders2"></i> Your approved choice pay: {{ flexText(s) }}</p>
+                  <p class="rw-flex"><i class="bi bi-sliders2"></i> Choice pay: {{ flexText(s) }}</p>
                 }
               </section>
             }
@@ -170,6 +223,13 @@ export class RewardsComponent implements OnInit {
   percent(part: number, total: number): number { return total ? Math.round(part / total * 100) : 0; }
   flexText(s: Statement): string { return s.flex.map((line) => `${line.label} ${this.money(line.amount)}`).join(', '); }
   stackLabel(s: Statement): string { return this.counted(s).map((block) => `${block.label} ${this.percent(block.total, s.total)}%`).join(', '); }
+
+  initials(name: string): string {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
 
   pick(id: string): void {
     this.personId = id;
