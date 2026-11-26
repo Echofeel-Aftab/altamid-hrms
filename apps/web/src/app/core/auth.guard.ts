@@ -47,3 +47,25 @@ export const guestGuard: CanActivateFn = () => {
   if (api.token) return router.createUrlTree(['/']);
   return true;
 };
+
+/**
+ * Soft web gate for Company desks. Pass any of the listed access keys (or `owner`).
+ * API hard-403 remains the source of truth.
+ */
+export function featureGuard(...features: string[]): CanActivateFn {
+  return async () => {
+    const api = inject(ApiService);
+    const store = inject(SessionStore);
+    const router = inject(Router);
+    if (!api.token) return router.createUrlTree(['/login']);
+    if (!(await loadMe(api, store))) return router.createUrlTree(['/login']);
+    if ((store.me?.outlets?.list.length || 0) > 1 && !api.outlet) return router.createUrlTree(['/outlet']);
+    const access = store.me?.access || [];
+    const ok = features.some((feature) => {
+      if (feature === 'owner') return store.me?.role === 'owner';
+      if (feature === 'settings') return access.includes('settings') || access.includes('access');
+      return access.includes(feature);
+    });
+    return ok ? true : router.createUrlTree(['/']);
+  };
+}

@@ -5,7 +5,6 @@ import { bag, fail, optional, text } from './http';
 import { AccessService } from './access.service';
 import { PrismaService } from './prisma.service';
 import { richOf } from './rich';
-import { isHr } from './roles';
 import { SessionUser } from './session';
 import { TtlCache } from './ttl-cache';
 
@@ -41,10 +40,12 @@ export class LibraryService {
 
   async widgets(session: SessionUser) {
     const saved = await this.saved(session.companyId);
-    return HOME_WIDGETS.map((item) => {
+    const items = [];
+    for (const item of HOME_WIDGETS) {
       const audience = saved.get(item.key) || 'all';
-      return { key: item.key, label: item.label, audience, visible: this.allows(session.role, audience) };
-    });
+      items.push({ key: item.key, label: item.label, audience, visible: await this.allowsAudience(session, audience) });
+    }
+    return items;
   }
 
   async saveWidgets(session: SessionUser, body: unknown) {
@@ -66,7 +67,7 @@ export class LibraryService {
 
   async allowsKey(session: SessionUser, key: string): Promise<boolean> {
     const saved = await this.saved(session.companyId);
-    return this.allows(session.role, saved.get(key) || 'all');
+    return this.allowsAudience(session, saved.get(key) || 'all');
   }
 
   async view(session: SessionUser) {
@@ -83,9 +84,13 @@ export class LibraryService {
       canEdit: editor,
       visible: show || editor,
       handbook: handbook && (show || editor) ? this.handbookView(handbook) : null,
-      help: (show || editor) ? help.filter((row) => editor || (row.published && this.seesHelp(session.role, row.audience))).map((row) => ({
-        id: row.id, title: row.title, body: row.body, published: row.published, audience: row.audience, audienceLabel: this.helpLabel(row.audience),
-      })) : [],
+      help: (show || editor)
+        ? (await Promise.all(help.map(async (row) => ({ row, ok: editor || (row.published && await this.seesHelp(session, row.audience)) }))))
+            .filter((item) => item.ok)
+            .map(({ row }) => ({
+              id: row.id, title: row.title, body: row.body, published: row.published, audience: row.audience, audienceLabel: this.helpLabel(row.audience),
+            }))
+        : [],
       documents: await this.visibleDocuments(session, editor),
     };
   }
@@ -102,9 +107,9 @@ export class LibraryService {
       this.prisma.libraryDoc.findFirst({ where: { companyId: session.companyId, kind: 'handbook', published: true }, orderBy: { createdAt: 'desc' } }),
       this.prisma.libraryDoc.findMany({ where: { companyId: session.companyId, kind: 'help', published: true }, orderBy: { title: 'asc' } }),
     ]);
-    const faqs = help
-      .filter((row) => editor || this.seesHelp(session.role, row.audience))
-      .map((row) => ({ id: row.id, title: row.title, body: row.body, audienceLabel: this.helpLabel(row.audience) }));
+    const faqs = (await Promise.all(help.map(async (row) => ({ row, ok: editor || await this.seesHelp(session, row.audience) }))))
+      .filter((item) => item.ok)
+      .map(({ row }) => ({ id: row.id, title: row.title, body: row.body, audienceLabel: this.helpLabel(row.audience) }));
     return { directory, canEdit: editor, handbook: handbook ? this.handbookView(handbook) : null, faqs };
   }
 
@@ -267,7 +272,8 @@ export class LibraryService {
     const departmentNames = new Map(departments.map((row) => [row.id, row.name]));
     const locationNames = new Map(locations.map((row) => [row.id, row.name]));
     const canEdit = editor || await this.gates.holds(session, 'library');
-    return rows.filter((row) => this.canOpen(session, self, row, canEdit)).map((row) => {
+    const opened = await Promise.all(rows.map(async (row) => ({ row, ok: await this.canOpen(session, self, row, canEdit) })));
+    return opened.filter((item) => item.ok).map(({ row }) => {
       const kind = DOCUMENT_KINDS.find((item) => 'doc:' + item.key === row.kind);
       return {
         id: row.id,
@@ -283,13 +289,18 @@ export class LibraryService {
     });
   }
 
-  private canOpen(session: SessionUser, self: { id: string; departmentId: string | null; locationId: string | null } | null, row: { published: boolean; kind: string; audience: string; employeeId: string; departmentId: string; locationId: string }, editor: boolean): boolean {
+  private async canOpen(session: SessionUser, self: { id: string; departmentId: string | null; locationId: string | null } | null, row: { published: boolean; kind: string; audience: string; employeeId: string; departmentId: string; locationId: string }, editor: boolean): Promise<boolean> {
     if (editor) return true;
     if (!row.published) return false;
     const personal = DOCUMENT_KINDS.find((item) => 'doc:' + item.key === row.kind)?.personal;
     if (personal || row.audience === 'person') return !!self && row.employeeId === self.id;
-    if (row.audience === 'hr') return false;
-    if (row.audience === 'managers') return session.role === 'manager';
+    if (row.audience === 'hr') return this.gates.holds(session, 'people.edit') || this.gates.holds(session, 'library');
+    if (row.audience === 'managers') {
+      return session.role === 'manager'
+        || (await this.gates.holds(session, 'approvals'))
+        || (await this.gates.holds(session, 'people.edit'))
+        || (await this.gates.holds(session, 'library'));
+    }
     if (row.audience === 'department') return !!self?.departmentId && self.departmentId === row.departmentId;
     if (row.audience === 'location') return !!self?.locationId && self.locationId === row.locationId;
     return row.audience === 'all';
@@ -369,20 +380,25 @@ export class LibraryService {
   }
 
   /** Employees read employee answers. Managers, payroll, and HR each read their own, and HR can read every answer. */
-  private seesHelp(role: string, audience: string): boolean {
+  private async seesHelp(session: SessionUser, audience: string): Promise<boolean> {
     const who = audience || 'all';
     if (who === 'all') return true;
-    if (isHr(role)) return true;
-    if (who === 'employee') return role === 'employee' || role === 'manager';
-    if (who === 'managers') return role === 'manager';
-    if (who === 'staff') return role === 'payroll' || role === 'accountant';
+    if (await this.gates.holds(session, 'library') || await this.gates.holds(session, 'people.edit')) return true;
+    if (who === 'employee') return session.role === 'employee' || session.role === 'manager' || await this.gates.holds(session, 'approvals');
+    if (who === 'managers') return session.role === 'manager' || await this.gates.holds(session, 'approvals');
+    if (who === 'staff') return await this.gates.holds(session, 'pay') || session.role === 'accountant';
     return false;
   }
 
-  private allows(role: string, audience: string): boolean {
+  private async allowsAudience(session: SessionUser, audience: string): Promise<boolean> {
     if (audience === 'off') return false;
-    if (audience === 'hr') return isHr(role);
-    if (audience === 'managers') return isHr(role) || role === 'manager';
+    if (audience === 'hr') return this.gates.holds(session, 'people.edit') || this.gates.holds(session, 'library');
+    if (audience === 'managers') {
+      return (await this.gates.holds(session, 'people.edit'))
+        || (await this.gates.holds(session, 'library'))
+        || (await this.gates.holds(session, 'approvals'))
+        || session.role === 'manager';
+    }
     return true;
   }
 

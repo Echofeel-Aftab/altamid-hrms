@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { AccessService } from './access.service';
 import { bag, fail, optional, text } from './http';
 import { PrismaService } from './prisma.service';
-import { isHr } from './roles';
 import { SessionUser } from './session';
 
 export const GROWTH_GRADES = [
@@ -34,7 +34,10 @@ type PersonRow = {
 
 @Injectable()
 export class GrowthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gates: AccessService,
+  ) {}
 
   /** The signed-in person's growth, or a person their manager or HR may publish for. */
   async view(session: SessionUser, personId: string) {
@@ -45,8 +48,8 @@ export class GrowthService {
       return { person: null, people, canPublish: false, grades: GROWTH_GRADES, suggestedYear, chart: [], history: [], latest: null, current: null };
     }
     const person = await this.person(session, id);
-    if (!this.canSee(session, person)) fail(403, 'You can open your own growth. Your manager or HR can open the people they publish for.');
-    const canPublish = this.canPublish(session, person);
+    if (!(await this.canSee(session, person))) fail(403, 'You can open your own growth. Your manager or HR can open the people they publish for.');
+    const canPublish = await this.canPublish(session, person);
     const rows = await this.prisma.appraisal.findMany({
       where: { companyId: session.companyId, employeeId: person.id, ...(canPublish ? {} : { published: true }) },
       orderBy: { year: 'asc' },
@@ -73,7 +76,7 @@ export class GrowthService {
   async save(session: SessionUser, body: unknown) {
     const input = bag(body);
     const person = await this.person(session, text(input.employeeId, 'Person', 40));
-    if (!this.canPublish(session, person)) fail(403, 'Your manager or HR publishes this appraisal.');
+    if (!(await this.canPublish(session, person))) fail(403, 'Your manager or HR publishes this appraisal.');
     const year = this.yearOf(input.year);
     const grade = text(input.grade, 'Grade', 40);
     const scale = GROWTH_GRADES.find((item) => item.grade === grade);
@@ -105,14 +108,15 @@ export class GrowthService {
   async remove(session: SessionUser, body: unknown) {
     const input = bag(body);
     const person = await this.person(session, text(input.employeeId, 'Person', 40));
-    if (!this.canPublish(session, person)) fail(403, 'Your manager or HR publishes this appraisal.');
+    if (!(await this.canPublish(session, person))) fail(403, 'Your manager or HR publishes this appraisal.');
     const year = this.yearOf(input.year);
     await this.prisma.appraisal.deleteMany({ where: { companyId: session.companyId, employeeId: person.id, year } });
     return this.view(session, person.id);
   }
 
   private async choices(session: SessionUser) {
-    const where = isHr(session.role)
+    const desk = (await this.gates.holds(session, 'people.edit')) || (await this.gates.holds(session, 'performance'));
+    const where = desk
       ? { companyId: session.companyId, status: { in: ['active', 'onboarding'] } }
       : session.employeeId
         ? { companyId: session.companyId, status: { in: ['active', 'onboarding'] }, OR: [{ id: session.employeeId }, { managerId: session.employeeId }] }
@@ -139,12 +143,12 @@ export class GrowthService {
     return row;
   }
 
-  private canSee(session: SessionUser, person: { id: string; managerId: string | null }): boolean {
-    return person.id === session.employeeId || this.canPublish(session, person);
+  private async canSee(session: SessionUser, person: { id: string; managerId: string | null }): Promise<boolean> {
+    return person.id === session.employeeId || (await this.canPublish(session, person));
   }
 
-  private canPublish(session: SessionUser, person: { id: string; managerId: string | null }): boolean {
-    if (isHr(session.role)) return true;
+  private async canPublish(session: SessionUser, person: { id: string; managerId: string | null }): Promise<boolean> {
+    if ((await this.gates.holds(session, 'people.edit')) || (await this.gates.holds(session, 'performance'))) return true;
     return !!session.employeeId && person.managerId === session.employeeId && person.id !== session.employeeId;
   }
 

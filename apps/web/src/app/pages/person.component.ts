@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { bankFromIfsc, cleanIfsc } from '../core/bank';
 import { I18n } from '../core/i18n';
 import { Org, Person } from '../core/models';
 import { SessionStore } from '../core/session.store';
@@ -428,7 +429,7 @@ const SECRET = new Set(['pan', 'bankAccount', 'ifsc', 'password', 'aadhaar']);
             <div><label for="pan">PAN</label><input id="pan" name="pan" [(ngModel)]="pan" autocomplete="off"></div>
             <div><label for="bankName">Bank</label><input id="bankName" name="bankName" [(ngModel)]="bankName"></div>
             <div><label for="bank">Account number</label><input id="bank" name="bank" [(ngModel)]="bankAccount" autocomplete="off"></div>
-            <div><label for="ifsc">IFSC</label><input id="ifsc" name="ifsc" [(ngModel)]="ifsc" autocomplete="off"></div>
+            <div><label for="ifsc">IFSC</label><input id="ifsc" name="ifsc" [ngModel]="ifsc" (ngModelChange)="onIfsc($event)" autocomplete="off" maxlength="11" placeholder="HDFC0001234" style="text-transform: uppercase"></div>
             <div><label for="aadhaar">Aadhaar</label><input id="aadhaar" name="aadhaar" [(ngModel)]="extra['aadhaar']" autocomplete="off" inputmode="numeric" maxlength="14"></div>
             <div><label for="uan">UAN</label><input id="uan" name="uan" [(ngModel)]="extra['uan']" inputmode="numeric" maxlength="12"></div>
             <div><label for="esic">ESIC number</label><input id="esic" name="esic" [(ngModel)]="extra['esicNo']" inputmode="numeric" maxlength="17"></div>
@@ -704,12 +705,22 @@ export class PersonComponent implements OnInit {
     }
   }
 
+  /** Uppercases the IFSC and suggests the bank from its first four letters, never over a name typed by hand. */
+  onIfsc(value: string): void {
+    const previous = bankFromIfsc(this.ifsc);
+    this.ifsc = cleanIfsc(value);
+    const bank = bankFromIfsc(this.ifsc);
+    if (bank && (!this.bankName.trim() || this.bankName === previous)) this.bankName = bank;
+  }
+
   private async prefill(application: string): Promise<void> {
     try {
       const found = await this.api.get<{
         existing: { id: string; code: string } | null;
         firstName: string; lastName: string; email: string; phone: string; city: string;
         designationId: string; departmentId: string; locationId: string; workerType: string; title: string;
+        dateOfBirth?: string; gender?: string; maritalStatus?: string; nationality?: string; address?: string;
+        state?: string; pincode?: string; expectedCtc?: string;
       }>('/v1/hiring/applications/' + encodeURIComponent(application) + '/prefill');
       if (found.existing) {
         this.error = 'This applicant already has a record, ' + found.existing.code + '. Open it from People instead of adding them again.';
@@ -723,7 +734,16 @@ export class PersonComponent implements OnInit {
       if (found.designationId) this.designationId = found.designationId;
       if (found.departmentId) this.departmentId = found.departmentId;
       if (found.locationId) this.locationId = found.locationId;
-      this.prefilled = 'Filled from the application for ' + (found.title || 'the opening') + '. Check the joining date, manager and pay details, then save.';
+      if (found.dateOfBirth) this.dateOfBirth = found.dateOfBirth;
+      if (found.gender) this.gender = found.gender;
+      if (found.maritalStatus) this.maritalStatus = found.maritalStatus;
+      if (found.nationality) this.nationality = found.nationality;
+      if (found.address) this.address = found.address;
+      if (found.city) this.extra['city'] = found.city;
+      if (found.state) this.extra['state'] = found.state;
+      if (found.pincode) this.extra['pincode'] = found.pincode;
+      this.prefilled = 'Filled from the application for ' + (found.title || 'the opening') + '. Check the joining date, manager and pay details, then save.'
+        + (found.expectedCtc ? ' They asked for ' + found.expectedCtc + ' (not saved).' : '');
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'The application could not be read.';
     }

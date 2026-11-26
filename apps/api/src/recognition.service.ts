@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { AccessService } from './access.service';
 import { shiftDay, todayInIndia } from './dates';
 import { bag, fail, optional, text } from './http';
+import { LibraryService } from './library.service';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
 
@@ -16,7 +18,11 @@ const RANGES = ['week', 'month', 'quarter', 'half', 'year', 'all'] as const;
 
 @Injectable()
 export class RecognitionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gates: AccessService,
+    private readonly library: LibraryService,
+  ) {}
 
   async view(session: SessionUser, rangeInput?: string) {
     const range = RANGES.includes(rangeInput as (typeof RANGES)[number]) ? rangeInput || 'month' : 'month';
@@ -66,6 +72,8 @@ export class RecognitionService {
   async find(session: SessionUser, query: string) {
     const needle = query.trim().toLowerCase();
     if (needle.length < 2) return { people: [] as Array<{ id: string; name: string; code: string }> };
+    const allowed = (await this.gates.canBrowsePeople(session)) || (await this.library.allowsKey(session, 'directory'));
+    if (!allowed) return { people: [] };
     const rows = await this.prisma.employee.findMany({
       where: { companyId: session.companyId, status: { in: ['active', 'onboarding'] }, id: { not: session.employeeId || '' } },
       orderBy: { firstName: 'asc' },

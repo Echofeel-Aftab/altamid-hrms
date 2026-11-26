@@ -143,6 +143,22 @@ export class LeaveLedger {
 
   private quota(type: LeaveType, joined: string, joinYear: number, year: number, policy: PeoplePolicy): number {
     if (type.daysPerYear <= 0 || year < joinYear) return 0;
+    const full = this.fullQuota(type, joined, joinYear, year, policy);
+    if (!policy.monthlyAccrual) return full;
+    // Monthly accrual: past years are fully earned, later years nothing yet, this year one twelfth per month.
+    const today = todayInIndia();
+    const nowYear = Number(today.slice(0, 4));
+    if (year < nowYear) return full;
+    if (year > nowYear) return 0;
+    const nowMonth = Number(today.slice(5, 7));
+    let months = nowMonth;
+    if (year === joinYear && /^\d{4}-\d{2}-\d{2}$/.test(joined)) {
+      months = Math.max(0, nowMonth - Number(joined.slice(5, 7)) + (Number(joined.slice(8, 10)) <= 15 ? 1 : 0));
+    }
+    return Math.min(full, half((type.daysPerYear * months) / 12));
+  }
+
+  private fullQuota(type: LeaveType, joined: string, joinYear: number, year: number, policy: PeoplePolicy): number {
     if (year > joinYear || !policy.prorateLeave || !/^\d{4}-\d{2}-\d{2}$/.test(joined)) return type.daysPerYear;
     const month = Number(joined.slice(5, 7));
     const day = Number(joined.slice(8, 10));

@@ -64,7 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Company',
     items: [
       { path: '/people', label: 'People', icon: 'bi bi-people', feature: 'people' },
-      { path: '/assets', label: 'Assets', icon: 'bi bi-laptop', feature: 'assets' },
+      { path: '/assets', label: 'Assets', icon: 'bi bi-laptop' },
       { path: '/hiring', label: 'Hiring', icon: 'bi bi-briefcase', feature: 'hiring' },
       { path: '/vendors', label: 'Vendors', icon: 'bi bi-building', feature: 'hiring' },
       { path: '/organisation', label: 'Organisation', icon: 'bi bi-diagram-3', feature: 'people' },

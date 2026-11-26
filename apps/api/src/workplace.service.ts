@@ -1466,6 +1466,84 @@ export class WorkplaceService {
     };
   }
 
+  /**
+   * One click from Exceptions: opens a pending regularization for that person and day, with the shift
+   * as the default times. It never approves anything. The person's normal approval flow decides.
+   * Others' lines must be in the caller's exceptions span; your own day needs no span.
+   */
+  async regularizeException(session: SessionUser, body: unknown) {
+    const input = bag(body);
+    const personId = optionalId(input.personId) || session.employeeId || '';
+    const day = String(input.day || '').trim();
+    if (!personId) fail(400, 'Choose the person to regularize.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) fail(400, 'Choose a real date.');
+    const today = todayInIndia();
+    if (day > today) fail(400, 'Regularization is only for days that have already started.');
+    if (day < shiftDay(today, -60)) fail(400, 'Choose a day within the last 60 days.');
+    const own = personId === session.employeeId;
+    let flags: string[] = [];
+    if (own) {
+      await this.stillWorking(session);
+    } else {
+      const span = await this.gates.span(session, 'exceptions');
+      if (span === 'none') fail(403, 'You do not have access to attendance exceptions.');
+      const view = await this.exceptions(session, day);
+      const row = view.rows.find((item) => item.id === personId);
+      if (!row) fail(400, 'That person has no exception on this day in your view.');
+      flags = row.flags;
+    }
+    const person = await this.prisma.employee.findFirst({ where: { id: personId, companyId: session.companyId }, select: { id: true, status: true } });
+    if (!person || person.status === 'exited') fail(404, 'That person was not found.');
+    const open = await this.prisma.attendanceRequest.findFirst({
+      where: { companyId: session.companyId, employeeId: personId, kind: 'regularization', status: 'pending', day },
+    });
+    if (open) fail(409, 'A regularization for ' + day + ' is already waiting for a decision.');
+    const rules = await this.timeRules(session.companyId);
+    const range = kolkataDayRange(day);
+    const punches = await this.prisma.punch.findMany({
+      where: { companyId: session.companyId, employeeId: personId, punchedAt: { gte: range.start, lte: range.end } },
+      orderBy: { punchedAt: 'asc' },
+    });
+    const arrived = punches.find((punch) => punch.kind === 'in');
+    const left = [...punches].reverse().find((punch) => punch.kind === 'out');
+    const arrivedAt = arrived ? this.hhmm(this.minutesInIndia(arrived.punchedAt)) : '';
+    const leftAt = left ? this.hhmm(this.minutesInIndia(left.punchedAt)) : '';
+    // Late and no-punch days claim the shift start. A day only missing the out punch keeps the real in time.
+    let inTime = input.inTime ? this.clockOf(input.inTime, 'In time') : arrivedAt && !flags.includes('late') ? arrivedAt : rules.shiftStart;
+    let outTime = input.outTime ? this.clockOf(input.outTime, 'Out time') : leftAt && leftAt >= rules.shiftEnd && !flags.includes('early') ? leftAt : rules.shiftEnd;
+    if (outTime <= inTime && !input.inTime && !input.outTime) {
+      inTime = rules.shiftStart;
+      outTime = rules.shiftEnd;
+    }
+    if (outTime <= inTime) fail(400, 'Out time has to be after in time.');
+    const reason = input.reason
+      ? text(input.reason, 'Reason', 500)
+      : own
+        ? 'Regularization for ' + day + ' raised from Exceptions.'
+        : 'Raised from Exceptions by ' + session.name + (flags.length ? ' (' + flags.join(', ') + ')' : '') + '. Please confirm the times.';
+    const flow = await buildFlow(this.prisma, session.companyId, personId, 'regularization');
+    const created = await this.prisma.attendanceRequest.create({
+      data: {
+        companyId: session.companyId,
+        employeeId: personId,
+        kind: 'regularization',
+        day,
+        endsOn: '',
+        hours: '',
+        inTime,
+        outTime,
+        place: '',
+        reason,
+        status: 'pending',
+        flowJson: JSON.stringify(flow),
+      },
+    });
+    await this.prisma.auditEvent.create({
+      data: { companyId: session.companyId, actorId: session.id, action: 'attendance.regularize', entity: 'employee', entityId: personId, detail: day },
+    });
+    return this.presentTime(created);
+  }
+
   private descendantIds(people: Array<{ id: string; managerId: string | null }>, root: string): Set<string> {
     const children = new Map<string, string[]>();
     for (const person of people) {

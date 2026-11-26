@@ -12,7 +12,7 @@ import { bag, bankOf, emailOf, fail, ifscOf, oneOf, optional, optionalDay, optio
 import { LicenceService } from './licence.service';
 import { unscoped } from './outlet-context';
 import { PrismaService } from './prisma.service';
-import { EMPLOYEE_STATUSES, isStaff, WORKER_TYPES } from './roles';
+import { EMPLOYEE_STATUSES, WORKER_TYPES } from './roles';
 import { SessionUser } from './session';
 import { SettingsService } from './settings.service';
 
@@ -344,6 +344,7 @@ export class DirectoryService {
   }
 
   async reporting(session: SessionUser, focusId?: string) {
+    const browse = await this.gates.canBrowsePeople(session);
     const rows = await this.prisma.employee.findMany({
       where: { companyId: session.companyId, status: { in: ['active', 'onboarding'] } },
       select: {
@@ -366,9 +367,15 @@ export class DirectoryService {
       };
     };
     const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-    const focus = focusId ? byId.get(focusId) : session.employeeId ? byId.get(session.employeeId) : undefined;
+    const selfId = session.employeeId || '';
+    const focus = focusId ? byId.get(focusId) : selfId ? byId.get(selfId) : undefined;
     if (focusId && !focus) fail(404, 'That person is not on the reporting tree.');
-    if (!focus) return { selfId: session.employeeId, me: null, chain: [], peers: [], reports: [], team: null, leads: [], people: rows.length };
+    if (!focus) return { selfId: session.employeeId, me: null, chain: [], peers: [], reports: [], team: null, leads: [], people: browse ? rows.length : 0 };
+
+    if (!browse && focus.id !== selfId) {
+      const allowed = this.reportingReach(selfId, focus.id, byId, reportsOf);
+      if (!allowed) fail(403, 'You can open only your own reporting line and your reports.');
+    }
 
     const chain = [];
     const seen = new Set([focus.id]);
@@ -378,13 +385,16 @@ export class DirectoryService {
       chain.push(node(up));
       up = byId.get(up)!.managerId;
     }
-    const peers = focus.managerId && byId.has(focus.managerId)
+    const mine = focus.id === selfId;
+    const peers = (browse || mine) && focus.managerId && byId.has(focus.managerId)
       ? (reportsOf.get(focus.managerId) || []).filter((id) => id !== focus.id).map(node).sort(byName)
       : [];
-    const reports = (reportsOf.get(focus.id) || []).map(node).sort(byName);
+    const reports = (browse || mine || focus.managerId === selfId)
+      ? (reportsOf.get(focus.id) || []).map(node).sort(byName)
+      : [];
 
     let team = null;
-    if (focus.teamId) {
+    if ((browse || mine) && focus.teamId) {
       const row = await this.prisma.team.findFirst({ where: { id: focus.teamId, companyId: session.companyId }, select: { name: true, leadId: true, departmentId: true } });
       if (row) {
         const department = row.departmentId ? await this.prisma.department.findFirst({ where: { id: row.departmentId, companyId: session.companyId }, select: { name: true } }) : null;
@@ -396,9 +406,38 @@ export class DirectoryService {
         };
       }
     }
-    const led = await this.prisma.team.findMany({ where: { companyId: session.companyId, leadId: focus.id }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+    const led = (browse || mine)
+      ? await this.prisma.team.findMany({ where: { companyId: session.companyId, leadId: focus.id }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+      : [];
     const leads = led.map((item) => ({ name: item.name, members: rows.filter((row) => row.teamId === item.id && row.id !== focus.id).map((row) => node(row.id)).sort(byName) }));
-    return { selfId: session.employeeId, me: node(focus.id), chain, peers, reports, team, leads, people: rows.length };
+    return { selfId: session.employeeId, me: node(focus.id), chain, peers, reports, team, leads, people: browse ? rows.length : (reportsOf.get(selfId) || []).length + 1 };
+  }
+
+  /** Self, ancestors on the manager chain, or anyone in the downward report tree. */
+  private reportingReach(
+    selfId: string,
+    focusId: string,
+    byId: Map<string, { id: string; managerId: string | null }>,
+    reportsOf: Map<string, string[]>,
+  ): boolean {
+    if (!selfId || !byId.has(selfId) || !byId.has(focusId)) return false;
+    let up: string | null | undefined = focusId;
+    const seen = new Set<string>();
+    while (up && byId.has(up) && !seen.has(up)) {
+      if (up === selfId) return true;
+      seen.add(up);
+      up = byId.get(up)!.managerId;
+    }
+    const queue = [selfId];
+    const walked = new Set<string>();
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (walked.has(id)) continue;
+      walked.add(id);
+      if (id === focusId) return true;
+      for (const child of reportsOf.get(id) || []) queue.push(child);
+    }
+    return false;
   }
 
   private async chartRows(companyId: string) {
@@ -567,7 +606,9 @@ export class DirectoryService {
   }
 
   async getPerson(session: SessionUser, id: string) {
-    return this.present(await this.person(session.companyId, id), session, await this.powers(session));
+    const row = await this.person(session.companyId, id);
+    await this.gates.assertCanViewPerson(session, row);
+    return this.present(row, session, await this.powers(session));
   }
 
   async createPerson(session: SessionUser, body: unknown) {
@@ -911,14 +952,20 @@ export class DirectoryService {
     };
   }
 
-  private async powers(session: SessionUser): Promise<{ editor: boolean; pay: boolean }> {
-    return { editor: await this.gates.holds(session, 'people.edit'), pay: await this.gates.holds(session, 'pay') };
+  private async powers(session: SessionUser): Promise<{ editor: boolean; pay: boolean; directory: boolean }> {
+    return {
+      editor: await this.gates.holds(session, 'people.edit'),
+      pay: await this.gates.holds(session, 'pay'),
+      directory: await this.gates.canBrowsePeople(session),
+    };
   }
 
-  private present(row: PersonRow, viewer: SessionUser, powers: { editor: boolean; pay: boolean }) {
+  private present(row: PersonRow, viewer: SessionUser, powers: { editor: boolean; pay: boolean; directory: boolean }) {
     const self = viewer.employeeId === row.id;
+    const manages = !!viewer.employeeId && row.managerId === viewer.employeeId;
+    const seeOrg = self || powers.directory || manages;
     const seePay = self || powers.pay;
-    const seePhone = self || isStaff(viewer.role) || (viewer.role === 'manager' && row.managerId === viewer.employeeId);
+    const seePhone = self || powers.directory || manages || powers.editor;
     const pan = openSecret(row.panEnc, this.key);
     const bank = openSecret(row.bankEnc, this.key);
     const ifsc = openSecret(row.ifscEnc, this.key);
@@ -930,7 +977,7 @@ export class DirectoryService {
       firstName: row.firstName,
       lastName: row.lastName,
       name: fullName,
-      email: isStaff(viewer.role) || self || viewer.role === 'manager' ? row.email : '',
+      email: seeOrg || powers.editor ? row.email : '',
       phone: seePhone ? row.phone : '',
       workerType: row.workerType,
       status: row.status,
@@ -942,7 +989,7 @@ export class DirectoryService {
       client: row.client ? { id: row.client.id, name: row.client.name } : null,
       location: row.location ? { id: row.location.id, name: row.location.name, state: row.location.state, city: row.location.city } : null,
       manager: row.manager ? { id: row.manager.id, name: `${row.manager.firstName} ${row.manager.lastName}`.trim() } : null,
-      costCentre: isStaff(viewer.role) ? row.costCentre : '',
+      costCentre: powers.directory || powers.editor || powers.pay ? row.costCentre : '',
       dateOfJoining: row.dateOfJoining,
       dateOfExit: row.dateOfExit,
       service: this.serviceOf(row.dateOfJoining, row.dateOfExit),
@@ -975,7 +1022,7 @@ export class DirectoryService {
       esicNo: seePay || powers.editor ? row.esicNo : '',
       aadhaar: seePay || powers.editor ? (powers.pay ? aadhaar : maskSecret(aadhaar)) : '',
       taxRegime: seePay ? row.taxRegime : '',
-      signIn: row.user ? { role: isStaff(viewer.role) || self ? row.user.role : '', active: row.user.active } : null,
+      signIn: row.user ? { role: powers.editor || self ? row.user.role : '', active: row.user.active } : null,
     };
   }
 

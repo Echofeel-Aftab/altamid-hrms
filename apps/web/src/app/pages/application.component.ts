@@ -1,6 +1,6 @@
 import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { SessionStore } from '../core/session.store';
 import { ModalComponent } from '../shared/modal.component';
@@ -243,8 +243,11 @@ const HISTORY_ICON: Record<string, string> = {
               </div>
             </form>
             @if (row.status === 'hired' && canAddPeople && !row.repeat.employees.length) {
-              <div class="actions ad-save"><a class="btn btn-gold" routerLink="/people/new" [queryParams]="{ application: row.id }"><i class="bi bi-person-plus"></i> Add as employee</a></div>
-              <p class="muted ad-fine">Opens Add a person with the name, contact and role filled. Nothing is saved until you save it there.</p>
+              <div class="actions ad-save">
+                <a class="btn btn-gold" routerLink="/people/new" [queryParams]="{ application: row.id }"><i class="bi bi-person-plus"></i> Add as employee</a>
+                <button type="button" class="btn btn-ghost" [disabled]="saving" (click)="addNow()"><i class="bi bi-lightning-charge"></i> Add now</button>
+              </div>
+              <p class="muted ad-fine">Add as employee opens the form with the name, contact, role and personal details filled, so you can check the joining date and manager first. Add now saves it straight away with today as the joining date. Neither gives them a sign-in or pay details.</p>
             } @else {
               <p class="muted ad-fine">Hired people are not added to People automatically. Mark the application hired to add them from here.</p>
             }
@@ -319,6 +322,7 @@ const HISTORY_ICON: Record<string, string> = {
 export class ApplicationComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly sweet = inject(Sweet);
   private readonly destroyRef = inject(DestroyRef);
   readonly canAddPeople = !!inject(SessionStore).me?.access?.includes('people.edit');
@@ -444,6 +448,27 @@ export class ApplicationComponent implements OnInit {
 
   resumeLink(row: Detail): string {
     return /^https?:\/\//i.test(row.resumeUrl || '') ? row.resumeUrl : '';
+  }
+
+  /** Creates the person from the hired application. The server checks hired status, email clashes and access. */
+  async addNow(): Promise<void> {
+    if (!this.row || this.saving) return;
+    const ok = await this.sweet.confirm({
+      title: 'Add ' + this.row.name + ' to People?',
+      text: 'This creates the employee record now, joining today. You can edit the manager, dates and pay details afterwards.',
+      confirmText: 'Add now',
+    });
+    if (!ok) return;
+    this.saving = true;
+    try {
+      const person = await this.api.post<{ id: string; code: string }>('/v1/hiring/applications/' + this.row.id + '/person', {});
+      this.sweet.success({ title: 'Added', text: this.row.name + ' is now ' + person.code + ' in People.' });
+      await this.router.navigate(['/people', person.id]);
+    } catch (error) {
+      this.sweet.error({ title: 'Not added', text: error instanceof Error ? error.message : 'Try again.' });
+    } finally {
+      this.saving = false;
+    }
   }
 
   private async confirmReject(): Promise<boolean> {

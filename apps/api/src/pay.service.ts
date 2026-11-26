@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { randomBytes } from 'crypto';
 import { join } from 'path';
 import { Injectable } from '@nestjs/common';
 import { dataKey, maskSecret, openSecret } from './crypto';
@@ -104,6 +105,74 @@ export class PayService {
       : await this.prisma.payStructure.create({ data: { companyId: session.companyId, employeeId, effectiveFrom, ...data } });
     await this.audit(session, 'pay.structure', saved.id, employeeId);
     return this.presentStructure(saved);
+  }
+
+  /** Percent-of-CTC line templates. They hold shares only; applying one never saves anything for a person. */
+  async ctcTemplates(session: SessionUser) {
+    await this.gates.gate(session, 'pay.structure', 'You do not have access to enter CTC.');
+    return { templates: await this.settings.ctcTemplates(session.companyId) };
+  }
+
+  async saveCtcTemplate(session: SessionUser, body: unknown) {
+    await this.gates.gate(session, 'pay.structure', 'You do not have access to enter CTC.');
+    const input = bag(body);
+    const name = text(input.name, 'Template name', 60);
+    if (!Array.isArray(input.lines) || !input.lines.length) fail(400, 'Add at least one line to the template.');
+    if (input.lines.length > 24) fail(400, 'Use at most 24 lines.');
+    const lines = input.lines.map((item) => {
+      const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      const side = String(row.side || '');
+      if (side !== 'earning' && side !== 'employer') fail(400, 'Choose earning or employer contribution.');
+      const percent = Math.round(Number(String(row.percent ?? '').replace(/,/g, '')) * 100) / 100;
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) fail(400, 'Each line is a percent of CTC, above 0 and up to 100.');
+      return { side: side as 'earning' | 'employer', name: text(row.name, 'Line', 80), percent, show: row.show === undefined ? true : row.show === true || row.show === 'true' };
+    });
+    const total = lines.reduce((sum, line) => sum + line.percent, 0);
+    if (total > 100.005) fail(400, 'The lines add up to ' + total.toFixed(2) + '%. Keep the total at 100% or less.');
+    const current = await this.settings.ctcTemplates(session.companyId);
+    const id = String(input.id || '').trim();
+    const existing = id ? current.find((row) => row.id === id) : undefined;
+    if (id && !existing) fail(404, 'That template was not found.');
+    if (current.some((row) => row.id !== existing?.id && row.name.toLowerCase() === name.toLowerCase())) fail(409, 'A template with that name already exists.');
+    if (!existing && current.length >= 12) fail(400, 'Keep to 12 templates or fewer. Remove one first.');
+    const saved = { id: existing?.id || randomBytes(8).toString('hex'), name, lines };
+    const next = existing ? current.map((row) => (row.id === saved.id ? saved : row)) : [...current, saved];
+    await this.settings.saveCtcTemplates(session.companyId, next);
+    await this.audit(session, 'pay.ctc-template', saved.id, name);
+    return { templates: next };
+  }
+
+  async removeCtcTemplate(session: SessionUser, body: unknown) {
+    await this.gates.gate(session, 'pay.structure', 'You do not have access to enter CTC.');
+    const id = text(bag(body).id, 'Template', 40);
+    const current = await this.settings.ctcTemplates(session.companyId);
+    const next = current.filter((row) => row.id !== id);
+    if (next.length === current.length) fail(404, 'That template was not found.');
+    await this.settings.saveCtcTemplates(session.companyId, next);
+    await this.audit(session, 'pay.ctc-template.remove', id, '');
+    return { templates: next };
+  }
+
+  /** Works out the lines for an annual CTC. Nothing is saved; the editor still saves it through the CTC form. */
+  async applyCtcTemplate(session: SessionUser, body: unknown) {
+    await this.gates.gate(session, 'pay.structure', 'You do not have access to enter CTC.');
+    const input = bag(body);
+    const template = (await this.settings.ctcTemplates(session.companyId)).find((row) => row.id === String(input.templateId || ''));
+    if (!template) fail(404, 'That template was not found.');
+    const total = this.paiseOf(input.annualCtc);
+    if (total <= 0) fail(400, 'Enter the annual CTC in rupees.');
+    const paise = template.lines.map((line) => Math.round((total * line.percent) / 100));
+    const percent = template.lines.reduce((sum, line) => sum + line.percent, 0);
+    // A template that adds to 100% must add back to the CTC to the paisa, so the rounding goes on the biggest line.
+    if (Math.abs(percent - 100) < 0.005) {
+      const big = paise.indexOf(Math.max(...paise));
+      paise[big] += total - paise.reduce((sum, value) => sum + value, 0);
+    }
+    return {
+      annual: this.rupees(paise.reduce((sum, value) => sum + value, 0)),
+      percent: Math.round(percent * 100) / 100,
+      lines: template.lines.map((line, index) => ({ side: line.side, name: line.name, show: line.show, rupees: (paise[index] / 100).toFixed(2) })),
+    };
   }
 
   async saveSlip(session: SessionUser, body: unknown) {

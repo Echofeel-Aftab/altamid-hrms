@@ -12,8 +12,11 @@ import { DataColumn, DataTableComponent } from '../shared/data-table.component';
   template: `
     <div class="page-head">
       <div><span class="page-mark" aria-hidden="true"><i class="bi bi-people"></i></span><p class="eyebrow">Directory</p><h1>People</h1><p class="muted">The first 100 records load. Search to find anyone in a larger company.</p></div>
-      @if (canEdit) { <div class="actions"><a class="btn btn-ghost" routerLink="/people/import"><i class="bi bi-file-earmark-arrow-up"></i> Import</a><a class="btn btn-primary" routerLink="/people/new"><i class="bi bi-person-plus"></i> Add a person</a></div> }
+      @if (canOpen && canEdit) { <div class="actions"><a class="btn btn-ghost" routerLink="/people/import"><i class="bi bi-file-earmark-arrow-up"></i> Import</a><a class="btn btn-primary" routerLink="/people/new"><i class="bi bi-person-plus"></i> Add a person</a></div> }
     </div>
+    @if (!canOpen) {
+      <section class="card"><h2><i class="bi bi-people"></i> People</h2><p class="muted">The company directory is turned off for your role.</p></section>
+    } @else {
     @if (error) { <p class="form-error">{{ error }}</p> }
     <app-data-table tableId="people" empty="No one matches that filter." [rows]="people" [columns]="columns" [loading]="loading">
       <div tableFilter class="people-filters">
@@ -34,6 +37,7 @@ import { DataColumn, DataTableComponent } from '../shared/data-table.component';
         </select>
       </div>
     </app-data-table>
+    }
   `,
 })
 export class PeopleComponent implements OnInit {
@@ -60,11 +64,19 @@ export class PeopleComponent implements OnInit {
     { key: 'joined', label: 'Joined', text: (row) => row.dateOfJoining || '—', optional: true },
   ];
 
+  get canOpen(): boolean {
+    return !!this.store.me?.access?.includes('people');
+  }
+
   get canEdit(): boolean {
     return !!this.store.me?.access?.includes('people.edit');
   }
 
   async ngOnInit(): Promise<void> {
+    if (!this.canOpen) {
+      this.loading = false;
+      return;
+    }
     await this.load();
   }
 

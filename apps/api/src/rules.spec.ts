@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'crypto';
 import { maskSecret, openSecret, seal } from './crypto';
 import { countedDays, inclusiveDays, nextEmployeeCode, rangesOverlap, weekdayOf } from './dates';
-import { readInbound } from './hiring.service';
+import { dayFrom, readInbound } from './hiring.service';
 import { canonicalJson } from './lease/canonical';
 import { decideAccess, LeaseV1 } from './lease/policy';
 import { rawPublicKey, verifyLeaseSignature } from './lease/verify';
@@ -17,6 +17,14 @@ describe('HRMS rules', () => {
     expect(inclusiveDays('2026-01-01', '2026-01-03')).toBe(3);
     expect(rangesOverlap('2026-01-01', '2026-01-03', '2026-01-03', '2026-01-04')).toBe(true);
     expect(rangesOverlap('2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04')).toBe(false);
+  });
+
+  it('reads a birth date from an application answer and ignores nonsense', () => {
+    expect(dayFrom('1995-03-07')).toBe('1995-03-07');
+    expect(dayFrom('7/3/1995')).toBe('1995-03-07');
+    expect(dayFrom('31-02-1995')).toBe('');
+    expect(dayFrom('2025-01-01')).toBe('');
+    expect(dayFrom('last Tuesday')).toBe('');
   });
 
   it('reads a job-portal application', () => {

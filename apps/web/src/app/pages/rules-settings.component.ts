@@ -10,8 +10,21 @@ interface Policy {
   compOffFullHours: number;
   compOffHalfHours: number;
   autoExit: boolean;
-  reminders: { probation: boolean; approvals: boolean; approvalHours: number; checkout: boolean; warranty: boolean; celebrations: boolean };
+  monthlyAccrual: boolean;
+  reminders: {
+    probation: boolean; approvals: boolean; approvalHours: number; checkout: boolean; warranty: boolean; celebrations: boolean;
+    hiringSla: boolean; hiringSlaDays: number; latePunch: boolean;
+  };
 }
+
+interface OnboardingPack {
+  templates: Array<{ id: string; name: string; roles: string[]; departments: string[]; tasks: string[] }>;
+  starter: string[];
+  roles: Array<{ id: string; name: string }>;
+  departments: string[];
+}
+
+interface ChecklistDraft { id: string; name: string; roles: string[]; departments: string[]; tasks: string }
 
 interface RunSummary {
   day: string;
@@ -22,6 +35,9 @@ interface RunSummary {
   checkout: number;
   warranty: number;
   emails: number;
+  accrual?: number;
+  hiring?: number;
+  latePunch?: number;
   notes: string[];
 }
 
@@ -112,6 +128,10 @@ const blankType = (): LeaveType => ({
               <input type="checkbox" name="prorateLeave" [(ngModel)]="policy.prorateLeave">
               <span><strong>Pro-rate leave in the joining year</strong><small>Someone joining in July gets about half the yearly quota. Joining on or before the 15th counts that month.</small></span>
             </label>
+            <label class="check">
+              <input type="checkbox" name="monthlyAccrual" [(ngModel)]="policy.monthlyAccrual">
+              <span><strong>Earn leave month by month</strong><small>Off: the whole year's quota is available from January. On: each month adds one twelfth, and people are told when it lands. Balances are worked out from this rule, so switching it off restores the full year.</small></span>
+            </label>
             <h3 class="rule-sub">Daily jobs</h3>
             <p class="muted small">Reminders appear under notifications. Emails go only for templates set to send automatically under Templates + Email.</p>
             <div class="rule-checks">
@@ -137,6 +157,20 @@ const blankType = (): LeaveType => ({
                 <input type="checkbox" name="rCheckout" [(ngModel)]="policy.reminders.checkout">
                 <span><strong>Missed check-out</strong><small>Asks the person to request a correction for yesterday.</small></span>
               </label>
+              <label class="check">
+                <input type="checkbox" name="rLatePunch" [(ngModel)]="policy.reminders.latePunch">
+                <span><strong>Missed and late punches, last three working days</strong><small>Tells each person about their own days, their manager once a day, and anyone with company-wide Exceptions. Days with leave, on duty, work from home or a regularization are skipped.</small></span>
+              </label>
+              <label class="check">
+                <input type="checkbox" name="rHiringSla" [(ngModel)]="policy.reminders.hiringSla">
+                <span><strong>Applications waiting too long</strong><small>A weekly nudge to people with Hiring when a new or reviewing application has not moved.</small></span>
+              </label>
+              @if (policy.reminders.hiringSla) {
+                <div class="rule-inline">
+                  <label for="rule-sla">Nudge after (days)</label>
+                  <input id="rule-sla" name="hiringSlaDays" type="number" min="1" max="90" [(ngModel)]="policy.reminders.hiringSlaDays">
+                </div>
+              }
               <label class="check">
                 <input type="checkbox" name="rWarranty" [(ngModel)]="policy.reminders.warranty">
                 <span><strong>Asset warranty ending</strong><small>30 days before the warranty ends.</small></span>
@@ -198,6 +232,52 @@ const blankType = (): LeaveType => ({
               </div>
               <div class="settings-inline-save">
                 <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-check2"></i> Save hiring rules</button>
+              </div>
+            </div>
+          </form>
+        }
+
+        @if (onboarding) {
+          <form class="settings-card" (ngSubmit)="saveOnboarding()">
+            <header class="settings-card-head">
+              <span class="settings-icon"><i class="bi bi-list-check"></i></span>
+              <div>
+                <h2>Onboarding checklists</h2>
+                <p>The tasks a new joiner starts with. The best match by role and department is used; with no match, the standard five tasks are used. Existing checklists are not changed.</p>
+              </div>
+            </header>
+            <div class="settings-card-body">
+              <p class="muted small">Standard tasks: {{ onboarding.starter.join(' · ') }}.</p>
+              @for (item of checklists; track $index) {
+                <fieldset class="rule-editor">
+                  <div class="field-grid">
+                    <div>
+                      <label [for]="'ob-name-' + $index">Checklist name</label>
+                      <input [id]="'ob-name-' + $index" [name]="'obName' + $index" [(ngModel)]="item.name" maxlength="60" placeholder="Sales joiners">
+                    </div>
+                    <div>
+                      <label [for]="'ob-roles-' + $index">Roles (none means any)</label>
+                      <select [id]="'ob-roles-' + $index" [name]="'obRoles' + $index" multiple [(ngModel)]="item.roles">
+                        @for (role of onboarding.roles; track role.id) { <option [value]="role.id">{{ role.name }}</option> }
+                      </select>
+                    </div>
+                    <div>
+                      <label [for]="'ob-depts-' + $index">Departments (none means any)</label>
+                      <select [id]="'ob-depts-' + $index" [name]="'obDepts' + $index" multiple [(ngModel)]="item.departments">
+                        @for (name of onboarding.departments; track name) { <option [value]="name">{{ name }}</option> }
+                      </select>
+                    </div>
+                  </div>
+                  <label [for]="'ob-tasks-' + $index">Tasks, one per line</label>
+                  <textarea [id]="'ob-tasks-' + $index" [name]="'obTasks' + $index" rows="5" [(ngModel)]="item.tasks" placeholder="Collect identity and bank details"></textarea>
+                  <div class="settings-inline-save">
+                    <button type="button" class="btn btn-ghost btn-danger" (click)="checklists.splice($index, 1)"><i class="bi bi-trash"></i> Remove checklist</button>
+                  </div>
+                </fieldset>
+              }
+              <div class="settings-inline-save">
+                <button type="button" class="btn btn-ghost" (click)="addChecklist()" [disabled]="checklists.length >= 12"><i class="bi bi-plus-lg"></i> Add a checklist</button>
+                <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-check2"></i> Save checklists</button>
               </div>
             </div>
           </form>
@@ -277,6 +357,8 @@ export class SettingsRulesComponent implements OnInit {
   private readonly sweet = inject(Sweet);
   policy: Policy | null = null;
   hiring: HiringRules | null = null;
+  onboarding: OnboardingPack | null = null;
+  checklists: ChecklistDraft[] = [];
   runs: AutomationView['runs'] = [];
   types: LeaveType[] = [];
   draft: LeaveType = blankType();
@@ -286,14 +368,16 @@ export class SettingsRulesComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const [view, leave, hiring] = await Promise.all([
+      const [view, leave, hiring, onboarding] = await Promise.all([
         this.api.get<AutomationView>('/v1/automation'),
         this.api.get<{ items: LeaveType[] }>('/v1/leave/types'),
         this.api.get<HiringRules>('/v1/hiring/rules').catch(() => null),
+        this.api.get<OnboardingPack>('/v1/onboarding/templates').catch(() => null),
       ]);
       this.apply(view);
       this.types = leave.items;
       this.hiring = hiring;
+      this.applyOnboarding(onboarding);
     } catch (error) {
       this.error = this.message(error);
     }
@@ -328,6 +412,9 @@ export class SettingsRulesComponent implements OnInit {
     if (summary.approvals) parts.push(`${summary.approvals} approval reminder(s)`);
     if (summary.checkout) parts.push(`${summary.checkout} missed check-out(s)`);
     if (summary.warranty) parts.push(`${summary.warranty} warranty alert(s)`);
+    if (summary.accrual) parts.push(`${summary.accrual} told about this month's leave credit`);
+    if (summary.hiring) parts.push(`${summary.hiring} application(s) waiting too long`);
+    if (summary.latePunch) parts.push(`${summary.latePunch} missed or late punch(es)`);
     if (summary.emails) parts.push(`${summary.emails} email(s)`);
     const text = parts.length ? parts.join(', ') : 'Nothing needed attention';
     return summary.notes?.length ? `${text}. ${summary.notes.join(' ')}` : text + '.';
@@ -338,6 +425,26 @@ export class SettingsRulesComponent implements OnInit {
     await this.act(async () => {
       this.apply(await this.api.post<AutomationView>('/v1/automation/policy', this.policy));
       this.ok = 'People rules and automation saved.';
+    });
+  }
+
+  addChecklist(): void {
+    this.checklists.push({ id: '', name: '', roles: [], departments: [], tasks: this.onboarding?.starter.join('\n') || '' });
+  }
+
+  async saveOnboarding(): Promise<void> {
+    await this.act(async () => {
+      const result = await this.api.post<OnboardingPack>('/v1/onboarding/templates', {
+        templates: this.checklists.map((item) => ({
+          id: item.id || undefined,
+          name: item.name.trim(),
+          roles: item.roles,
+          departments: item.departments,
+          tasks: item.tasks.split('\n').map((task) => task.trim()).filter(Boolean),
+        })),
+      });
+      this.applyOnboarding(result);
+      this.ok = 'Onboarding checklists saved. New joiners get the best match.';
     });
   }
 
@@ -390,6 +497,11 @@ export class SettingsRulesComponent implements OnInit {
       this.draft = saved ? { ...saved } : blankType();
       this.ok = `${body.name} saved.`;
     });
+  }
+
+  private applyOnboarding(pack: OnboardingPack | null): void {
+    this.onboarding = pack;
+    this.checklists = (pack?.templates || []).map((item) => ({ id: item.id, name: item.name, roles: [...item.roles], departments: [...item.departments], tasks: item.tasks.join('\n') }));
   }
 
   private apply(view: AutomationView): void {

@@ -147,6 +147,10 @@ interface StoredSettings {
   hiring: HiringRules;
   policy: PeoplePolicy;
   ai: AiSettings;
+  /** Checklists for new joiners, matched by role and department. Empty means the built-in five tasks. */
+  onboarding: OnboardingTemplate[];
+  /** Percent-of-CTC line templates used to start a person's CTC breakup. */
+  ctcTemplates: CtcTemplate[];
 }
 
 export interface PeoplePolicy {
@@ -156,8 +160,49 @@ export interface PeoplePolicy {
   compOffFullHours: number;
   compOffHalfHours: number;
   autoExit: boolean;
-  reminders: { probation: boolean; approvals: boolean; approvalHours: number; checkout: boolean; warranty: boolean; celebrations: boolean };
+  /** Off by default. When on, a year's leave quota is earned month by month instead of all in January. */
+  monthlyAccrual: boolean;
+  reminders: {
+    probation: boolean; approvals: boolean; approvalHours: number; checkout: boolean; warranty: boolean; celebrations: boolean;
+    /** Off by default. Nudges hiring when an application has had no movement for `hiringSlaDays`. */
+    hiringSla: boolean; hiringSlaDays: number;
+    /** Off by default. Looks back three working days for missed and late punches, not only yesterday's check-out. */
+    latePunch: boolean;
+  };
 }
+
+export interface OnboardingTemplate {
+  id: string;
+  name: string;
+  /** Role keys this list is for. Empty means any role. */
+  roles: string[];
+  /** Department names this list is for. Empty means any department. */
+  departments: string[];
+  tasks: string[];
+}
+
+export interface CtcLine {
+  side: 'earning' | 'employer';
+  name: string;
+  /** Percent of annual CTC, up to two decimals. */
+  percent: number;
+  show: boolean;
+}
+
+export interface CtcTemplate {
+  id: string;
+  name: string;
+  lines: CtcLine[];
+}
+
+/** The checklist used when no template matches. */
+export const STARTER_TASKS = [
+  'Collect identity and bank details',
+  'Issue the ID card',
+  'Issue the laptop',
+  'Complete induction',
+  'Confirm the manager',
+];
 
 export function defaultPolicy(): PeoplePolicy {
   return {
@@ -167,7 +212,8 @@ export function defaultPolicy(): PeoplePolicy {
     compOffFullHours: 8,
     compOffHalfHours: 4,
     autoExit: true,
-    reminders: { probation: true, approvals: true, approvalHours: 48, checkout: true, warranty: true, celebrations: true },
+    monthlyAccrual: false,
+    reminders: { probation: true, approvals: true, approvalHours: 48, checkout: true, warranty: true, celebrations: true, hiringSla: false, hiringSlaDays: 7, latePunch: false },
   };
 }
 
@@ -241,6 +287,8 @@ function defaults(): StoredSettings {
     hiring: { rejectDays: 0, exitDays: 0, tellApplicant: true, message: DEFAULT_COOLING_MESSAGE },
     policy: defaultPolicy(),
     ai: defaultAiSettings(),
+    onboarding: [],
+    ctcTemplates: [],
   };
 }
 
@@ -453,6 +501,7 @@ export class SettingsService {
       compOffFullHours: whole(input.compOffFullHours, current.compOffFullHours, 'Hours for a full comp-off day', 1, 12),
       compOffHalfHours: whole(input.compOffHalfHours, current.compOffHalfHours, 'Hours for a half comp-off day', 1, 12),
       autoExit: on(input.autoExit, current.autoExit),
+      monthlyAccrual: on(input.monthlyAccrual, current.monthlyAccrual),
       reminders: {
         probation: on(reminders.probation, current.reminders.probation),
         approvals: on(reminders.approvals, current.reminders.approvals),
@@ -460,6 +509,9 @@ export class SettingsService {
         checkout: on(reminders.checkout, current.reminders.checkout),
         warranty: on(reminders.warranty, current.reminders.warranty),
         celebrations: on(reminders.celebrations, current.reminders.celebrations),
+        hiringSla: on(reminders.hiringSla, current.reminders.hiringSla),
+        hiringSlaDays: whole(reminders.hiringSlaDays, current.reminders.hiringSlaDays, 'Days before a hiring reminder', 1, 90),
+        latePunch: on(reminders.latePunch, current.reminders.latePunch),
       },
     };
     if (next.compOffHalfHours >= next.compOffFullHours) fail(400, 'A half comp-off day needs fewer hours than a full day.');
@@ -567,6 +619,7 @@ export class SettingsService {
       compOffFullHours: this.whole(policy.compOffFullHours, fallback.compOffFullHours, 12) || fallback.compOffFullHours,
       compOffHalfHours: this.whole(policy.compOffHalfHours, fallback.compOffHalfHours, 12) || fallback.compOffHalfHours,
       autoExit: flag(policy.autoExit, fallback.autoExit),
+      monthlyAccrual: flag(policy.monthlyAccrual, fallback.monthlyAccrual),
       reminders: {
         probation: flag(reminders.probation, true),
         approvals: flag(reminders.approvals, true),
@@ -574,8 +627,13 @@ export class SettingsService {
         checkout: flag(reminders.checkout, true),
         warranty: flag(reminders.warranty, true),
         celebrations: flag(reminders.celebrations, true),
+        hiringSla: flag(reminders.hiringSla, fallback.reminders.hiringSla),
+        hiringSlaDays: this.whole(reminders.hiringSlaDays, fallback.reminders.hiringSlaDays, 90) || fallback.reminders.hiringSlaDays,
+        latePunch: flag(reminders.latePunch, fallback.reminders.latePunch),
       },
     };
+    base.onboarding = this.readOnboarding(source.onboarding);
+    base.ctcTemplates = this.readCtcTemplates(source.ctcTemplates);
     const tests = asRecord(source.tests);
     for (const [key, value] of Object.entries(tests)) {
       const note = asRecord(value);
@@ -584,6 +642,84 @@ export class SettingsService {
     }
     this.settingsCache.set(companyId, base);
     return structuredClone(base);
+  }
+
+  async onboardingTemplates(companyId: string): Promise<OnboardingTemplate[]> {
+    return (await this.load(companyId)).onboarding;
+  }
+
+  async onboardingView(session: SessionUser) {
+    await this.requireHr(session);
+    return this.onboardingPack(session.companyId);
+  }
+
+  private async onboardingPack(companyId: string) {
+    const [templates, ladder, departments] = await Promise.all([
+      this.onboardingTemplates(companyId),
+      this.gates.ensureLadder(companyId),
+      this.prisma.department.findMany({ where: { companyId }, select: { name: true }, orderBy: { name: 'asc' } }),
+    ]);
+    return { templates, starter: STARTER_TASKS, roles: ladder.map((role) => ({ id: role.key, name: role.name })), departments: departments.map((row) => row.name) };
+  }
+
+  async saveOnboarding(session: SessionUser, body: unknown) {
+    await this.requireHr(session);
+    const input = bag(body);
+    if (!Array.isArray(input.templates)) fail(400, 'Send the list of checklists.');
+    const stored = await this.load(session.companyId);
+    stored.onboarding = this.readOnboarding(input.templates, true);
+    await this.write(session.companyId, stored);
+    await this.prisma.auditEvent.create({ data: { companyId: session.companyId, actorId: session.id, action: 'settings.onboarding', entity: 'company', entityId: session.companyId } });
+    return this.onboardingPack(session.companyId);
+  }
+
+  /** The caller checks the pay gate. Templates hold percentages only, never a person's figures. */
+  async ctcTemplates(companyId: string): Promise<CtcTemplate[]> {
+    return (await this.load(companyId)).ctcTemplates;
+  }
+
+  async saveCtcTemplates(companyId: string, templates: CtcTemplate[]): Promise<CtcTemplate[]> {
+    const stored = await this.load(companyId);
+    stored.ctcTemplates = templates;
+    await this.write(companyId, stored);
+    return templates;
+  }
+
+  private readOnboarding(value: unknown, strict = false): OnboardingTemplate[] {
+    if (!Array.isArray(value)) return [];
+    if (strict && value.length > 12) fail(400, 'Keep to 12 checklists or fewer.');
+    const out: OnboardingTemplate[] = [];
+    for (const item of value.slice(0, 12)) {
+      const row = asRecord(item);
+      const name = clip(row.name, 60);
+      const tasks = (Array.isArray(row.tasks) ? row.tasks : []).map((task) => clip(task, 80)).filter(Boolean).slice(0, 20);
+      const roles = [...new Set((Array.isArray(row.roles) ? row.roles : []).map((role) => String(role).trim().toLowerCase()).filter((role) => /^[a-z][a-z0-9-]{1,30}$/.test(role)))].slice(0, 20);
+      const departments = [...new Set((Array.isArray(row.departments) ? row.departments : []).map((dept) => clip(dept, 60)).filter(Boolean))].slice(0, 20);
+      if (!name || !tasks.length) {
+        if (strict) fail(400, 'Each checklist needs a name and at least one task.');
+        continue;
+      }
+      out.push({ id: /^[a-f0-9]{16}$/.test(String(row.id || '')) ? String(row.id) : randomBytes(8).toString('hex'), name, roles, departments, tasks });
+    }
+    if (strict && new Set(out.map((row) => row.name.toLowerCase())).size !== out.length) fail(400, 'Give each checklist its own name.');
+    return out;
+  }
+
+  private readCtcTemplates(value: unknown): CtcTemplate[] {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, 12).flatMap((item) => {
+      const row = asRecord(item);
+      const name = clip(row.name, 60);
+      const lines = (Array.isArray(row.lines) ? row.lines : []).slice(0, 24).flatMap((line): CtcLine[] => {
+        const entry = asRecord(line);
+        const percent = Math.round(Number(entry.percent) * 100) / 100;
+        const lineName = clip(entry.name, 80);
+        if (!lineName || !Number.isFinite(percent) || percent <= 0 || percent > 100) return [];
+        return [{ side: entry.side === 'employer' ? 'employer' : 'earning', name: lineName, percent, show: entry.show !== false }];
+      });
+      if (!name || !lines.length) return [];
+      return [{ id: /^[a-f0-9]{16}$/.test(String(row.id || '')) ? String(row.id) : randomBytes(8).toString('hex'), name, lines }];
+    });
   }
 
   private readAccount(row: Record<string, unknown>): SalaryAccount {

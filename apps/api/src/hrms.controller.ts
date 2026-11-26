@@ -26,7 +26,6 @@ import { PublicController } from './public.controller';
 import { SystemService } from './system.service';
 import { ReportsService } from './reports.service';
 import { AutomationService } from './automation.service';
-import { isHr } from './roles';
 import { GrowthService } from './growth.service';
 import { WorkplaceService } from './workplace.service';
 import { AiService } from './ai.service';
@@ -184,6 +183,11 @@ export class HrmsController {
   @Get('hiring/applications/:id/prefill')
   hiringPrefill(@Req() request: RequestWithSession, @Param('id') id: string) {
     return this.hiring.prefill(request.session, id);
+  }
+
+  @Post('hiring/applications/:id/person')
+  hiringCreatePerson(@Req() request: RequestWithSession, @Param('id') id: string, @Body() body: unknown) {
+    return this.hiring.createPerson(request.session, id, body);
   }
 
   @Get('reports')
@@ -1000,6 +1004,11 @@ export class HrmsController {
     return this.workplace.exceptions(request.session, day);
   }
 
+  @Post('attendance/exceptions/regularize')
+  regularizeException(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.workplace.regularizeException(request.session, body);
+  }
+
   @Get('attendance/live')
   livePunches(@Req() request: RequestWithSession) {
     return this.devices.live(request.session);
@@ -1013,6 +1022,16 @@ export class HrmsController {
   @Post('attendance/punch')
   punch(@Req() request: RequestWithSession, @Body() body: unknown) {
     return this.workplace.punch(request.session, body || {});
+  }
+
+  @Get('onboarding/templates')
+  onboardingTemplates(@Req() request: RequestWithSession) {
+    return this.settings.onboardingView(request.session);
+  }
+
+  @Post('onboarding/templates')
+  saveOnboardingTemplates(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.settings.saveOnboarding(request.session, body);
   }
 
   @Get('pay')
@@ -1033,6 +1052,26 @@ export class HrmsController {
   @Post('pay/structure')
   savePayStructure(@Req() request: RequestWithSession, @Body() body: unknown) {
     return this.pay.saveStructure(request.session, body);
+  }
+
+  @Get('pay/ctc-templates')
+  ctcTemplates(@Req() request: RequestWithSession) {
+    return this.pay.ctcTemplates(request.session);
+  }
+
+  @Post('pay/ctc-templates')
+  saveCtcTemplate(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.pay.saveCtcTemplate(request.session, body);
+  }
+
+  @Post('pay/ctc-templates/delete')
+  removeCtcTemplate(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.pay.removeCtcTemplate(request.session, body);
+  }
+
+  @Post('pay/ctc-templates/apply')
+  applyCtcTemplate(@Req() request: RequestWithSession, @Body() body: unknown) {
+    return this.pay.applyCtcTemplate(request.session, body);
   }
 
   @Post('pay/slip')
@@ -1068,7 +1107,7 @@ export class HrmsController {
   }
 
   private async jobsOpen(request: RequestWithSession): Promise<boolean> {
-    if (isHr(request.session.role)) return true;
+    if (await this.gates.holds(request.session, 'people.edit') || await this.gates.holds(request.session, 'hiring')) return true;
     return this.library.allowsKey(request.session, 'jobs');
   }
 }

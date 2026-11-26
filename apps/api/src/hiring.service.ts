@@ -1,7 +1,9 @@
 import { randomBytes } from 'crypto';
 import { Injectable } from '@nestjs/common';
+import { JobApplication, Opening } from '@prisma/client';
 import { bag, emailOf, fail, optional, text } from './http';
 import { AccessService } from './access.service';
+import { DirectoryService } from './directory.service';
 import { ApplicantService, emailKey, highlight, nameKey, phoneKey, prettyDay, sharedPhones } from './applicant.service';
 import { unscoped } from './outlet-context';
 import { PrismaService } from './prisma.service';
@@ -19,6 +21,33 @@ export const PORTALS: Array<{ id: string; label: string; blurb: string }> = [
   { id: 'hirist', label: 'Hirist', blurb: 'Paste the Hirist apply address into the Hirist listing.' },
   { id: 'cutshort', label: 'Cutshort', blurb: 'Paste the Cutshort apply address into the Cutshort listing.' },
 ];
+
+type HiredRow = JobApplication & { opening: Opening | null; form: { fieldsJson: string } | null };
+
+/** What HR may adjust while adding a hired applicant. Sign-in, role, and pay details are deliberately absent. */
+const HIRE_OVERRIDES = [
+  'firstName', 'lastName', 'phone', 'workerType', 'departmentId', 'designationId', 'locationId', 'managerId', 'levelId', 'teamId',
+  'costCentre', 'dateOfJoining', 'confirmedOn', 'dateOfBirth', 'gender', 'maritalStatus', 'nationality', 'address', 'city', 'state', 'pincode',
+];
+
+/** Reads 2000-01-31, 31/01/2000, 31-01-2000, or 31.01.2000. Anything else, or an unlikely year, is left blank. */
+export function dayFrom(value: string): string {
+  const cleaned = value.trim();
+  let year = '';
+  let month = '';
+  let day = '';
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(cleaned);
+  const dmy = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(cleaned);
+  if (iso) [, year, month, day] = iso;
+  else if (dmy) [, day, month, year] = dmy;
+  else return '';
+  const stamp = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  const real = new Date(stamp);
+  if (real.getUTCFullYear() !== Number(year) || real.getUTCMonth() !== Number(month) - 1 || real.getUTCDate() !== Number(day)) return '';
+  const age = new Date().getUTCFullYear() - Number(year);
+  if (age < 14 || age > 90) return '';
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
 
 const PORTAL_IDS = new Set(PORTALS.map((portal) => portal.id));
 const WORKPLACES = new Set(['office', 'remote', 'hybrid']);
@@ -39,7 +68,7 @@ export interface InboundApplication {
 
 @Injectable()
 export class HiringService {
-  constructor(private readonly prisma: PrismaService, private readonly gates: AccessService, private readonly applicants: ApplicantService) {}
+  constructor(private readonly prisma: PrismaService, private readonly gates: AccessService, private readonly applicants: ApplicantService, private readonly directory: DirectoryService) {}
 
   async list(session: SessionUser) {
     await this.requireHr(session);
@@ -128,19 +157,83 @@ export class HiringService {
   async prefill(session: SessionUser, id: string) {
     await this.requireHr(session);
     if (!(await this.gates.holds(session, 'people.edit'))) fail(403, 'You do not have access to add people.');
-    const row = await this.prisma.jobApplication.findFirst({ where: { id, companyId: session.companyId }, include: { opening: true } });
+    const row = await this.hiredRow(session, id);
+    return this.draftOf(session.companyId, row);
+  }
+
+  /**
+   * Adds a hired applicant to People. Needs both `hiring` and `people.edit`. Only org placement can be
+   * adjusted here; sign-in, role, and pay details are never taken from this route, so the application
+   * cannot widen anyone's access. The person record itself goes through the normal create path.
+   */
+  async createPerson(session: SessionUser, id: string, body: unknown) {
+    await this.requireHr(session);
+    await this.gates.gate(session, 'people.edit', 'You do not have access to add people.');
+    const row = await this.hiredRow(session, id);
+    if (row.status !== 'hired') fail(400, 'Mark the application hired before adding the person.');
+    if (!row.email) fail(400, 'This application has no email, so the person cannot be added from it.');
+    const draft = await this.draftOf(session.companyId, row);
+    if (draft.existing) fail(409, 'This applicant already has a record, ' + draft.existing.code + '.');
+    if (await this.prisma.user.findUnique({ where: { email: row.email.trim().toLowerCase() } })) fail(409, 'That email is already used for sign-in.');
+    const input = bag(body);
+    const merged = { ...draft, ...Object.fromEntries(HIRE_OVERRIDES.filter((key) => input[key] !== undefined).map((key) => [key, input[key]])) } as Record<string, unknown>;
+    const person = await this.directory.createPerson(session, {
+      firstName: merged.firstName,
+      lastName: merged.lastName,
+      email: draft.email,
+      phone: merged.phone,
+      workerType: merged.workerType,
+      departmentId: merged.departmentId,
+      designationId: merged.designationId,
+      locationId: merged.locationId,
+      managerId: merged.managerId,
+      levelId: merged.levelId,
+      teamId: merged.teamId,
+      costCentre: merged.costCentre,
+      dateOfJoining: merged.dateOfJoining,
+      confirmedOn: merged.confirmedOn,
+      dateOfBirth: merged.dateOfBirth,
+      gender: merged.gender,
+      maritalStatus: merged.maritalStatus,
+      nationality: merged.nationality,
+      address: merged.address,
+      city: merged.city,
+      state: merged.state,
+      pincode: merged.pincode,
+    });
+    await this.applicants.event(session.companyId, row.id, 'note', 'Added to People as ' + person.code, session.name);
+    await this.prisma.auditEvent.create({
+      data: { companyId: session.companyId, actorId: session.id, action: 'application.person', entity: 'employee', entityId: person.id, detail: row.id },
+    });
+    return person;
+  }
+
+  private async hiredRow(session: SessionUser, id: string) {
+    const row = await this.prisma.jobApplication.findFirst({ where: { id, companyId: session.companyId }, include: { opening: true, form: { select: { fieldsJson: true } } } });
     if (!row) fail(404, 'That application was not found.');
+    return row;
+  }
+
+  /** Person-form values read from the application. Nothing here is saved or trusted until create validates it. */
+  private async draftOf(companyId: string, row: HiredRow) {
     const parts = row.name.trim().split(/\s+/);
     const lower = (value: string) => value.trim().toLowerCase();
+    const email = row.email.trim().toLowerCase();
     const [departments, designations, locations, already] = await Promise.all([
-      this.prisma.department.findMany({ where: { companyId: session.companyId }, select: { id: true, name: true } }),
-      this.prisma.designation.findMany({ where: { companyId: session.companyId }, select: { id: true, name: true } }),
-      this.prisma.location.findMany({ where: { companyId: session.companyId }, select: { id: true, name: true, city: true } }),
-      row.email ? this.prisma.employee.findFirst({ where: { companyId: session.companyId, email: { equals: row.email, mode: 'insensitive' } }, select: { id: true, code: true } }) : Promise.resolve(null),
+      this.prisma.department.findMany({ where: { companyId }, select: { id: true, name: true } }),
+      this.prisma.designation.findMany({ where: { companyId }, select: { id: true, name: true } }),
+      this.prisma.location.findMany({ where: { companyId }, select: { id: true, name: true, city: true } }),
+      email ? this.prisma.employee.findFirst({ where: { companyId, OR: [{ email: { equals: email, mode: 'insensitive' } }, { personalEmail: { equals: email, mode: 'insensitive' } }] }, select: { id: true, code: true } }) : Promise.resolve(null),
     ]);
     const title = row.opening?.title || row.jobTitle;
     const employment = lower(row.opening?.employment || '');
     const phone = row.phone.replace(/[^\d+ -]/g, '').trim();
+    const answers = this.answerList(row.answersJson, row.form?.fieldsJson || '[]');
+    const found = (keys: string[], label?: RegExp) => this.answerFor(answers, keys, label);
+    const gender = found(['gender', 'sex'], /^(gender|sex)\b/i).toLowerCase();
+    const marital = found(['maritalstatus', 'marital'], /marital/i).toLowerCase();
+    const pin = found(['pincode', 'pin', 'zip', 'postalcode'], /pin ?code|postal|zip/i).replace(/\s+/g, '');
+    const nationality = found(['nationality', 'citizenship'], /nationalit|citizen/i);
     return {
       applicationId: row.id,
       existing: already,
@@ -148,14 +241,48 @@ export class HiringService {
       lastName: parts.slice(1).join(' '),
       email: row.email,
       phone: /^\+?[0-9][0-9 -]{6,18}$/.test(phone) ? phone : '',
-      city: row.city,
+      city: row.city || found(['city', 'currentcity'], /^(current )?city\b/i).slice(0, 80),
       designationId: designations.find((item) => lower(item.name) === lower(title))?.id || '',
       departmentId: departments.find((item) => lower(item.name) === lower(row.opening?.department || ''))?.id || '',
       locationId: locations.find((item) => lower(item.name) === lower(row.opening?.location || '') || (item.city && lower(item.city) === lower(row.city)))?.id || '',
       workerType: employment.includes('intern') ? 'intern' : employment.includes('contract') ? 'contractor' : 'employee',
+      dateOfBirth: dayFrom(found(['dob', 'dateofbirth', 'birthdate', 'birthday'], /date of birth|birth ?date|\bdob\b|birthday/i)),
+      gender: gender.startsWith('f') ? 'Female' : gender.startsWith('m') ? 'Male' : gender ? 'Other' : '',
+      maritalStatus: marital.startsWith('single') || marital.startsWith('unmarried') ? 'Single' : marital.startsWith('married') ? 'Married' : marital ? 'Other' : '',
+      nationality: nationality.slice(0, 40),
+      address: found(['address', 'currentaddress', 'residentialaddress', 'residence'], /(current|present|residential|home)? ?address/i).slice(0, 240),
+      state: found(['state'], /^state\b/i).slice(0, 60),
+      pincode: /^[1-9][0-9]{5}$/.test(pin) ? pin : '',
+      /** For HR's eyes while setting pay. It is not stored on the person. */
+      expectedCtc: found(['expectedctc', 'expectedsalary', 'expectedcompensation', 'ctc'], /expected.*(ctc|salary|compensation|pay)|^ctc\b/i).slice(0, 80),
       title,
       status: row.status,
     };
+  }
+
+  /** Every non-core answer with its field key and label, so form-builder keys and labels can both be matched. */
+  private answerList(raw: string, fieldsJson: string): Array<{ key: string; label: string; value: string }> {
+    let labels: Record<string, string> = {};
+    try {
+      const fields = JSON.parse(fieldsJson || '[]') as Array<{ key?: string; label?: string }>;
+      if (Array.isArray(fields)) labels = Object.fromEntries(fields.filter((field) => field.key).map((field) => [String(field.key), String(field.label || field.key)]));
+    } catch {
+      labels = {};
+    }
+    try {
+      const parsed = JSON.parse(raw || '{}') as Record<string, unknown>;
+      return Object.entries(parsed)
+        .filter(([key, value]) => typeof value === 'string' && value.trim() && !['name', 'email', 'phone', 'note', 'resume', 'role'].includes(key))
+        .map(([key, value]) => ({ key: key.toLowerCase().replace(/[^a-z0-9]/g, ''), label: labels[key] || key, value: String(value).replace(/[\u0000-\u001F\u007F]/g, ' ').trim() }));
+    } catch {
+      return [];
+    }
+  }
+
+  private answerFor(answers: Array<{ key: string; label: string; value: string }>, keys: string[], label?: RegExp): string {
+    const byKey = answers.find((item) => keys.includes(item.key));
+    if (byKey) return byKey.value;
+    return (label && answers.find((item) => label.test(item.label))?.value) || '';
   }
 
   async application(session: SessionUser, id: string) {

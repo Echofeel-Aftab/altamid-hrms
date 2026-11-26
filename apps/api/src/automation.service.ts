@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AccessService } from './access.service';
-import { kolkataDayRange, shiftDay, todayInIndia } from './dates';
+import { kolkataDayRange, shiftDay, todayInIndia, weekdayOf } from './dates';
 import { fail } from './http';
 import { LicenceService } from './licence.service';
 import { closeEmployment } from './lifecycle';
@@ -20,6 +20,12 @@ export interface RunSummary {
   checkout: number;
   warranty: number;
   emails: number;
+  /** People told about this month's leave credit. Zero unless monthly accrual is on. */
+  accrual?: number;
+  /** Applications stale past the hiring SLA. Zero unless that reminder is on. */
+  hiring?: number;
+  /** Missed or late punches found over the last three working days. Zero unless that reminder is on. */
+  latePunch?: number;
   notes: string[];
 }
 
@@ -133,6 +139,9 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       ['checkout', async () => { if (policy.reminders.checkout) summary.checkout = await this.checkout(companyId, day); }],
       ['warranty', async () => { if (policy.reminders.warranty) summary.warranty = await this.warranty(companyId, day, holdersOf); }],
       ['celebrations', async () => { if (policy.reminders.celebrations) summary.emails = await this.celebrations(companyId, day); }],
+      ['accrual', async () => { if (policy.monthlyAccrual) summary.accrual = await this.accrual(companyId, day); }],
+      ['hiring', async () => { if (policy.reminders.hiringSla) summary.hiring = await this.hiringSla(companyId, day, policy, holdersOf); }],
+      ['latePunch', async () => { if (policy.reminders.latePunch) summary.latePunch = await this.latePunches(companyId, day, policy, holdersOf); }],
     ];
     for (const [name, job] of jobs) {
       try {
@@ -342,6 +351,187 @@ export class AutomationService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return sent;
+  }
+
+  /**
+   * Monthly leave accrual. Balances are worked out from the policy by the leave ledger (LeaveLedger.quota earns one
+   * twelfth per month when the flag is on), so there are no credit rows to write and no way to credit twice. This job
+   * records one marker per month and tells people their balance has grown.
+   */
+  private async accrual(companyId: string, day: string): Promise<number> {
+    const month = day.slice(0, 7);
+    const where = { companyId_job_ref: { companyId, job: 'accrual', ref: month } };
+    if (await this.prisma.automationLog.findUnique({ where })) return 0;
+    const types = await this.prisma.leaveType.findMany({ where: { companyId, active: true, compOff: false, daysPerYear: { gt: 0 } }, select: { name: true } });
+    let told = 0;
+    if (types.length) {
+      const users = await this.prisma.user.findMany({
+        where: { companyId, active: true, employee: { is: { status: { in: ['active', 'onboarding'] } } } },
+        select: { id: true },
+      });
+      const label = new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      await this.notify(companyId, users.map((user) => ({
+        userId: user.id,
+        kind: 'automation',
+        title: `${label} leave has been credited`,
+        body: `This month's share of ${types.map((type) => type.name).join(', ')} is added to your balance. Open Leave to see it.`,
+        link: '/leave',
+        ref: `accrual:${month}`,
+      })));
+      told = users.length;
+    }
+    await this.prisma.automationLog.create({ data: { companyId, job: 'accrual', ref: month, detail: JSON.stringify({ people: told, types: types.length }) } }).catch((error: unknown) => {
+      if (!this.duplicate(error)) throw error;
+    });
+    return told;
+  }
+
+  /** One weekly digest per hiring user for applications nobody has moved for the SLA days. */
+  private async hiringSla(companyId: string, day: string, policy: PeoplePolicy, holdersOf: (feature: string) => Promise<string[]>): Promise<number> {
+    const days = policy.reminders.hiringSlaDays;
+    const cutoff = new Date(Date.now() - days * 86400000);
+    const rows = await this.prisma.jobApplication.findMany({
+      where: {
+        companyId,
+        status: { in: ['new', 'reviewing'] },
+        createdAt: { lt: cutoff },
+        OR: [{ openingId: null }, { opening: { is: { status: 'open' } } }],
+      },
+      select: { id: true, name: true, jobTitle: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+      take: 500,
+    });
+    if (!rows.length) return 0;
+    const moved = await this.prisma.applicationEvent.groupBy({
+      by: ['applicationId'],
+      where: { companyId, applicationId: { in: rows.map((row) => row.id) }, kind: { in: ['status', 'note'] } },
+      _max: { createdAt: true },
+    });
+    const last = new Map(moved.map((row) => [row.applicationId, row._max.createdAt]));
+    const stale = rows.filter((row) => (last.get(row.id) || row.createdAt) < cutoff);
+    if (!stale.length) return 0;
+    const week = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86400000 / 7);
+    const oldest = stale[0];
+    const to = await holdersOf('hiring');
+    await this.notify(companyId, to.map((userId) => ({
+      userId,
+      kind: 'automation',
+      title: `${stale.length} application${stale.length === 1 ? '' : 's'} waiting more than ${days} days`,
+      body: `Oldest: ${oldest.name}${oldest.jobTitle ? ' for ' + oldest.jobTitle : ''}, received ${prettyDay(oldest.createdAt.toISOString().slice(0, 10))}. Shortlist or reject so applicants hear back.`,
+      link: '/hiring/applications',
+      ref: `hiring-sla:${week}`,
+    })));
+    return stale.length;
+  }
+
+  /**
+   * Missed and late punches over the last three working days, beyond the single yesterday check-out reminder.
+   * People hear about their own days, their manager gets one digest, and company-wide exceptions holders get one total.
+   */
+  private async latePunches(companyId: string, day: string, policy: PeoplePolicy, holdersOf: (feature: string) => Promise<string[]>): Promise<number> {
+    const rules = await this.settings.timeRules(companyId);
+    const days = [1, 2, 3].map((back) => shiftDay(day, -back));
+    const holidays = new Set((await this.prisma.holiday.findMany({ where: { companyId, day: { in: days } }, select: { day: true } })).map((row) => row.day));
+    const working = days.filter((item) => !rules.weekOff.includes(weekdayOf(item)) && !holidays.has(item));
+    if (!working.length) return 0;
+    const oldest = working[working.length - 1];
+    const newest = working[0];
+    const people = await this.prisma.employee.findMany({
+      where: { companyId, status: { in: ['active', 'onboarding'] } },
+      select: { id: true, firstName: true, lastName: true, dateOfJoining: true, managerId: true, user: { select: { id: true, active: true } } },
+    });
+    const [punches, leave, requests] = await Promise.all([
+      this.prisma.punch.findMany({
+        where: { companyId, punchedAt: { gte: kolkataDayRange(oldest).start, lte: kolkataDayRange(newest).end } },
+        orderBy: { punchedAt: 'asc' },
+        select: { employeeId: true, kind: true, punchedAt: true },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: { companyId, status: { in: ['pending', 'approved'] }, startsOn: { lte: newest }, endsOn: { gte: oldest } },
+        select: { employeeId: true, startsOn: true, endsOn: true },
+      }),
+      this.prisma.attendanceRequest.findMany({
+        where: { companyId, status: { in: ['pending', 'approved'] }, kind: { in: ['regularization', 'onduty', 'wfh'] }, day: { lte: newest }, OR: [{ day: { gte: oldest } }, { endsOn: { gte: oldest } }] },
+        select: { employeeId: true, day: true, endsOn: true },
+      }),
+    ]);
+    const start = this.clock(rules.shiftStart);
+    const minutes = (date: Date) => {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+      return Number(parts.find((part) => part.type === 'hour')?.value || 0) * 60 + Number(parts.find((part) => part.type === 'minute')?.value || 0);
+    };
+    const yesterday = shiftDay(day, -1);
+    const found: Array<{ person: (typeof people)[number]; day: string; kind: 'missed' | 'late' | 'open'; at: string }> = [];
+    for (const item of working) {
+      const range = kolkataDayRange(item);
+      for (const person of people) {
+        if (person.dateOfJoining && person.dateOfJoining > item) continue;
+        if (leave.some((row) => row.employeeId === person.id && row.startsOn <= item && row.endsOn >= item)) continue;
+        if (requests.some((row) => row.employeeId === person.id && row.day <= item && (row.endsOn ? row.endsOn >= item : row.day === item))) continue;
+        const list = punches.filter((row) => row.employeeId === person.id && row.punchedAt >= range.start && row.punchedAt <= range.end);
+        const arrived = list.find((row) => row.kind === 'in');
+        const left = [...list].reverse().find((row) => row.kind === 'out');
+        if (!list.length) {
+          found.push({ person, day: item, kind: 'missed', at: '' });
+        } else if (arrived && minutes(arrived.punchedAt) > start + rules.graceMinutes) {
+          found.push({ person, day: item, kind: 'late', at: this.hhmm(minutes(arrived.punchedAt)) });
+        } else if (arrived && !left && !(item === yesterday && policy.reminders.checkout)) {
+          found.push({ person, day: item, kind: 'open', at: '' });
+        }
+      }
+    }
+    if (!found.length) return 0;
+    const notices: Notice[] = [];
+    for (const row of found) {
+      if (!row.person.user?.active) continue;
+      const when = prettyDay(row.day);
+      notices.push({
+        userId: row.person.user.id,
+        kind: 'automation',
+        title: row.kind === 'missed' ? `No punch recorded on ${when}` : row.kind === 'late' ? `Late arrival on ${when}` : `No check-out on ${when}`,
+        body: row.kind === 'late' ? `You punched in at ${row.at}. If that is wrong, raise a regularization.` : 'If you were at work, raise a regularization so the day is counted.',
+        link: '/requests',
+        ref: `latepunch:${row.day}:${row.kind}`,
+      });
+    }
+    const byManager = new Map<string, number>();
+    for (const row of found) if (row.person.managerId) byManager.set(row.person.managerId, (byManager.get(row.person.managerId) || 0) + 1);
+    const told = new Set<string>();
+    for (const [managerId, count] of byManager) {
+      const user = people.find((person) => person.id === managerId)?.user;
+      if (!user?.active) continue;
+      told.add(user.id);
+      notices.push({
+        userId: user.id,
+        kind: 'automation',
+        title: `${count} punch issue${count === 1 ? '' : 's'} in your team`,
+        body: 'Missed, late, or open punches from the last three working days. Open Exceptions to review.',
+        link: '/exceptions',
+        ref: `latepunch-team:${day}`,
+      });
+    }
+    for (const userId of await holdersOf('exceptions:company')) {
+      if (told.has(userId)) continue;
+      notices.push({
+        userId,
+        kind: 'automation',
+        title: `${found.length} punch issue${found.length === 1 ? '' : 's'} over the last three working days`,
+        body: 'Missed, late, or open punches. Open Exceptions to review them.',
+        link: '/exceptions',
+        ref: `latepunch-team:${day}`,
+      });
+    }
+    await this.notify(companyId, notices);
+    return found.length;
+  }
+
+  private clock(value: string): number {
+    const [hour, minute] = value.split(':').map(Number);
+    return hour * 60 + minute;
+  }
+
+  private hhmm(minutes: number): string {
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
 
   /** Users who hold a feature. A ':company' suffix keeps only company-wide holders, not team managers. */

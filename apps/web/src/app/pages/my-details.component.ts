@@ -1,6 +1,7 @@
 import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
+import { bankFromIfsc, cleanIfsc } from '../core/bank';
 import { Person } from '../core/models';
 import { squarePhoto } from '../core/photo';
 import { PhotoComponent } from '../shared/photo.component';
@@ -210,7 +211,7 @@ const STATES = [
             <div><label for="md-esic">ESIC number</label><input id="md-esic" name="esicNo" inputmode="numeric" maxlength="17" [(ngModel)]="form['esicNo']" placeholder="If you are covered"></div>
             <div><label for="md-bank">Bank</label><input id="md-bank" name="bankName" [(ngModel)]="form['bankName']"></div>
             <div><label for="md-account">Account number</label><input id="md-account" name="bankAccount" autocomplete="off" inputmode="numeric" [(ngModel)]="form['bankAccount']"></div>
-            <div><label for="md-ifsc">IFSC</label><input id="md-ifsc" name="ifsc" autocomplete="off" maxlength="11" [(ngModel)]="form['ifsc']" placeholder="HDFC0001234" (blur)="upper('ifsc')"></div>
+            <div><label for="md-ifsc">IFSC</label><input id="md-ifsc" name="ifsc" autocomplete="off" maxlength="11" [ngModel]="form['ifsc']" (ngModelChange)="onIfsc($event)" placeholder="HDFC0001234" style="text-transform: uppercase"></div>
             <div class="span-2">
               <label for="md-regime">Income tax regime</label>
               <select id="md-regime" name="taxRegime" [(ngModel)]="form['taxRegime']">
@@ -270,6 +271,15 @@ export class MyDetailsComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.load();
+  }
+
+  /** Uppercases the IFSC and suggests the bank name from it. The proposal still goes to HR to check. */
+  onIfsc(value: string): void {
+    const previous = bankFromIfsc(this.form['ifsc'] || '');
+    this.form['ifsc'] = cleanIfsc(value);
+    const bank = bankFromIfsc(this.form['ifsc']);
+    const current = (this.form['bankName'] || '').trim();
+    if (bank && (!current || current === previous)) this.form['bankName'] = bank;
   }
 
   upper(key: string): void {

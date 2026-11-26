@@ -2,6 +2,7 @@ import { Component, EventEmitter, inject, OnInit, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { bankFromIfsc, cleanIfsc } from '../core/bank';
 import { Sweet } from '../shared/sweet';
 import { Me, STATES } from '../core/models';
 import { SessionStore } from '../core/session.store';
@@ -143,7 +144,7 @@ function messageOf(error: unknown): string {
                   <div><label for="acc-holder">Account name</label><input id="acc-holder" name="accountName" [(ngModel)]="accountDraft.accountName" [placeholder]="legalName || 'As printed on the cheque book'" maxlength="120"></div>
                   <div>
                     <label for="acc-ifsc">IFSC</label>
-                    <input id="acc-ifsc" name="ifsc" [(ngModel)]="accountDraft.ifsc" (ngModelChange)="accountDraft.ifsc = $event.toUpperCase()" placeholder="HDFC0001234" maxlength="11" autocomplete="off">
+                    <input id="acc-ifsc" name="ifsc" [(ngModel)]="accountDraft.ifsc" (ngModelChange)="onAccountIfsc($event)" placeholder="HDFC0001234" maxlength="11" autocomplete="off">
                   </div>
                   <div>
                     <label for="acc-no">Account number</label>
@@ -296,6 +297,14 @@ export class SettingsGeneralComponent implements OnInit {
     this.accountHint = row.accountMask ? 'Saved ' + row.accountMask + ' — leave blank to keep' : '';
     this.error = '';
     this.ok = '';
+  }
+
+  /** Uppercases the IFSC and suggests the bank name from its first four letters, never over a name typed by hand. */
+  onAccountIfsc(value: string): void {
+    const previous = bankFromIfsc(this.accountDraft.ifsc);
+    this.accountDraft.ifsc = cleanIfsc(value);
+    const bank = bankFromIfsc(this.accountDraft.ifsc);
+    if (bank && (!this.accountDraft.bankName.trim() || this.accountDraft.bankName === previous)) this.accountDraft.bankName = bank;
   }
 
   resetAccount(): void {

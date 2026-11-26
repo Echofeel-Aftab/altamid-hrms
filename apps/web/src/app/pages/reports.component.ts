@@ -103,6 +103,9 @@ function escapeHtml(value: string): string {
         <p class="muted">Employee, attendance, leave, payroll and hiring reports from your live records. Export to Excel or save as PDF.</p>
       </div>
     </div>
+    @if (!canOpen) {
+      <section class="card"><h2><i class="bi bi-bar-chart-line"></i> Reports</h2><p class="muted">Reports are turned off for your role.</p></section>
+    } @else {
     @if (error) { <p class="form-error">{{ error }}</p> }
 
     @if (!catalog && !error) { <p class="muted">Loading reports…</p> }
@@ -261,6 +264,7 @@ function escapeHtml(value: string): string {
         }
       }
     }
+    }
   `,
 })
 export class ReportsComponent implements OnInit, OnDestroy {
@@ -294,7 +298,12 @@ export class ReportsComponent implements OnInit, OnDestroy {
     { key: 'fy', label: 'This financial year' },
   ];
 
+  get canOpen(): boolean {
+    return !!this.store.me?.access?.includes('reports');
+  }
+
   async ngOnInit(): Promise<void> {
+    if (!this.canOpen) return;
     try {
       this.catalog = await this.api.get<Catalog>('/v1/reports');
     } catch (error) {

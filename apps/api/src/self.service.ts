@@ -170,8 +170,18 @@ export class SelfService {
 
   /** Who has a photo, so lists can show it. A name is included only when no one else shares it. */
   async photoBook(session: SessionUser) {
+    const browse = await this.gates.canBrowsePeople(session);
+    const where = browse
+      ? { companyId: session.companyId }
+      : {
+          companyId: session.companyId,
+          OR: [
+            ...(session.employeeId ? [{ id: session.employeeId }, { managerId: session.employeeId }] : []),
+          ],
+        };
+    if (!browse && !session.employeeId) return [];
     const rows = await this.prisma.employee.findMany({
-      where: { companyId: session.companyId },
+      where,
       select: { id: true, code: true, firstName: true, lastName: true, photoAt: true },
     });
     const names = new Map<string, number>();
@@ -186,8 +196,12 @@ export class SelfService {
   }
 
   async photo(session: SessionUser, id: string): Promise<Buffer | null> {
-    const person = await this.prisma.employee.findFirst({ where: { id, companyId: session.companyId }, select: { id: true, photoAt: true } });
+    const person = await this.prisma.employee.findFirst({
+      where: { id, companyId: session.companyId },
+      select: { id: true, photoAt: true, managerId: true },
+    });
     if (!person?.photoAt) return null;
+    await this.gates.assertCanViewPerson(session, person, 'You do not have access to that photo.');
     try {
       return readFileSync(join(process.cwd(), 'storage', 'photos', session.companyId, person.id + '.jpg'));
     } catch {

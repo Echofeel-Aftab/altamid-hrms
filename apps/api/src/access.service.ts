@@ -211,6 +211,23 @@ export class AccessService {
     if (!(await this.holds(session, feature))) fail(403, message);
   }
 
+  /** Directory / profile reads: self, people desk, people editors, or the person's direct manager. */
+  async canViewPerson(session: SessionUser, target: { id: string; managerId?: string | null }): Promise<boolean> {
+    if (session.employeeId && session.employeeId === target.id) return true;
+    if (await this.holds(session, 'people') || await this.holds(session, 'people.edit')) return true;
+    if (session.employeeId && target.managerId && target.managerId === session.employeeId) return true;
+    return false;
+  }
+
+  async assertCanViewPerson(session: SessionUser, target: { id: string; managerId?: string | null }, message = 'You do not have access to that person.'): Promise<void> {
+    if (!(await this.canViewPerson(session, target))) fail(403, message);
+  }
+
+  /** True when the viewer may open company-wide people lists, photo books, and colleague search. */
+  async canBrowsePeople(session: SessionUser): Promise<boolean> {
+    return this.holds(session, 'people') || this.holds(session, 'people.edit');
+  }
+
   async view(session: SessionUser) {
     await this.gate(session, 'access');
     const grants = await this.ready(session.companyId);

@@ -2,9 +2,11 @@ import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
 import { Person } from '../core/models';
+import { SessionStore } from '../core/session.store';
 import { PayrollMonthComponent } from './payroll-month.component';
 
 interface EditorLine { side: string; name: string; rupees: string; show: boolean }
+interface CtcTemplate { id: string; name: string; lines: Array<{ side: string; name: string; percent: number; show: boolean }> }
 interface SlipLayout {
   showCode: boolean; showDesignation: boolean; showDepartment: boolean; showLocation: boolean;
   showJoined: boolean; showPaidDays: boolean; showLopDays: boolean; showPan: boolean;
@@ -30,6 +32,9 @@ interface PayPack {
         <p class="lede">Design the salary by hand, then choose what the employee’s slip includes. Amounts are what you enter. PF, ESI, and tax are not calculated here.</p>
       </div>
     </div>
+    @if (!canOpen) {
+      <section class="card"><h2><i class="bi bi-wallet2"></i> Payroll</h2><p class="muted">Payroll is turned off for your role.</p></section>
+    } @else {
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
     <app-payroll-month (open)="openPerson($event)" (changed)="employeeId && loadPerson()" />
@@ -53,6 +58,7 @@ interface PayPack {
         <input id="pay-find" name="payFind" [(ngModel)]="finder" placeholder="Name or code" (keyup.enter)="findPeople()">
         <button type="button" class="btn btn-ghost" (click)="findPeople()"><i class="bi bi-search"></i> Search</button>
       </div>
+      @if (finderHint) { <p class="muted">{{ finderHint }}</p> }
       <label for="pay-person">Person</label>
       <select id="pay-person" [(ngModel)]="employeeId" (ngModelChange)="loadPerson()">
         <option value="">Choose a person</option>
@@ -63,6 +69,19 @@ interface PayPack {
       <section class="card">
         <h2><i class="bi bi-pie-chart"></i> CTC breakup</h2>
         <p class="muted">{{ pack.structure ? 'Annual CTC ' + pack.structure.annual : 'No CTC published yet.' }}</p>
+        <div class="ctc-templates" style="margin-bottom: 16px">
+          <label for="ctc-template">Start from a template</label>
+          <div class="split">
+            <select id="ctc-template" name="ctcTemplate" [(ngModel)]="templateId" aria-label="CTC template">
+              <option value="">{{ ctcTemplates.length ? 'Choose a template' : 'No templates saved yet' }}</option>
+              @for (item of ctcTemplates; track item.id) { <option [value]="item.id">{{ item.name }}</option> }
+            </select>
+            <input name="templateCtc" [(ngModel)]="templateCtc" inputmode="decimal" placeholder="Annual CTC in rupees" aria-label="Annual CTC for the template">
+            <button type="button" class="btn btn-ghost" [disabled]="busy || !templateId || !templateCtc" (click)="applyTemplate()"><i class="bi bi-magic"></i> Fill lines</button>
+            <button type="button" class="btn btn-ghost btn-danger" [disabled]="busy || !templateId" (click)="removeTemplate()"><i class="bi bi-trash"></i> Delete</button>
+          </div>
+          <p class="muted">A template is a share of the annual CTC for each line. Filling lines only fills the form below; nothing is saved until you save the CTC.</p>
+        </div>
         <form (ngSubmit)="saveStructure()">
           <label for="ctc-from">Effective from</label>
           <input id="ctc-from" type="date" name="effectiveFrom" [(ngModel)]="effectiveFrom" required>
@@ -81,6 +100,11 @@ interface PayPack {
             <button type="button" class="btn btn-ghost" (click)="structureLines.push({ side: 'earning', name: '', rupees: '', show: true })">Add a line</button>
             <label class="checkline"><input type="checkbox" name="ctcPublish" [(ngModel)]="structurePublished"> Publish for the employee</label>
             <button class="btn btn-primary" type="submit" [disabled]="busy">Save CTC</button>
+          </div>
+          <label for="ctc-template-name">Save these lines as a template</label>
+          <div class="split">
+            <input id="ctc-template-name" name="templateName" [(ngModel)]="templateName" maxlength="60" placeholder="Template name, for example Grade 3 staff">
+            <button type="button" class="btn btn-ghost" [disabled]="busy || !templateName.trim()" (click)="saveTemplate()"><i class="bi bi-bookmark-plus"></i> Save template</button>
           </div>
         </form>
       </section>
@@ -159,12 +183,15 @@ interface PayPack {
         </form>
       </section>
     }
+    }
   `,
 })
 export class PayrollComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly store = inject(SessionStore);
   people: Person[] = [];
   finder = '';
+  finderHint = '';
   employeeId = '';
   pack: PayPack | null = null;
   effectiveFrom = '2026-04-01';
@@ -184,6 +211,10 @@ export class PayrollComponent implements OnInit {
   ];
   structureLines: EditorLine[] = [{ side: 'earning', name: 'Basic', rupees: '', show: true }];
   structurePublished = true;
+  ctcTemplates: CtcTemplate[] = [];
+  templateId = '';
+  templateCtc = '';
+  templateName = '';
   month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
   slipHint = '';
   daysHint = '';
@@ -203,10 +234,16 @@ export class PayrollComponent implements OnInit {
   ok = '';
   busy = false;
 
+  get canOpen(): boolean {
+    return !!this.store.me?.access?.includes('pay');
+  }
+
   async ngOnInit(): Promise<void> {
+    if (!this.canOpen) return;
     try {
       await this.findPeople();
       this.layout = await this.api.get<SlipLayout>('/v1/pay/layout');
+      this.ctcTemplates = (await this.api.get<{ templates: CtcTemplate[] }>('/v1/pay/ctc-templates').catch(() => ({ templates: [] }))).templates;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load people.';
     }
@@ -243,9 +280,20 @@ export class PayrollComponent implements OnInit {
 
   async findPeople(): Promise<void> {
     const q = this.finder.trim();
-    const listed = await this.api.get<{ people: Person[] }>('/v1/people' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    let found: Person[] = [];
+    this.finderHint = '';
+    try {
+      found = (await this.api.get<{ people: Person[] }>('/v1/people' + (q ? '?q=' + encodeURIComponent(q) : ''))).people;
+    } catch {
+      // Without the People list, fall back to the scoped colleague search (two letters or more). Nothing is scanned on the client.
+      if (q.length < 2) {
+        this.finderHint = 'Type at least two letters of a name or code, then search.';
+      } else {
+        found = (await this.api.get<{ people: Array<{ id: string; name: string; code: string }> }>('/v1/directory?q=' + encodeURIComponent(q))).people as unknown as Person[];
+      }
+    }
     const selected = this.people.find((person) => person.id === this.employeeId);
-    this.people = listed.people;
+    this.people = found;
     if (selected && !this.people.some((person) => person.id === selected.id)) this.people = [selected, ...this.people];
   }
 
@@ -360,6 +408,59 @@ export class PayrollComponent implements OnInit {
 
   async removeForm(id: string): Promise<void> {
     await this.run('Form 16 removed.', () => this.api.post('/v1/pay/form/delete', { id }));
+  }
+
+  /** Fills the CTC lines from a template. The server works the amounts out; nothing is saved for the person. */
+  async applyTemplate(): Promise<void> {
+    await this.template(async () => {
+      const result = await this.api.post<{ annual: string; lines: EditorLine[] }>('/v1/pay/ctc-templates/apply', { templateId: this.templateId, annualCtc: this.templateCtc });
+      this.structureLines = result.lines.map((line) => ({ side: line.side, name: line.name, rupees: line.rupees, show: true }));
+      this.ok = 'Filled the lines for ' + result.annual + '. Check them, then save the CTC.';
+    });
+  }
+
+  /** Turns the lines on screen into shares of their total, so the same split can be reused for another person. */
+  async saveTemplate(): Promise<void> {
+    await this.template(async () => {
+      const lines = this.structureLines.filter((line) => line.name.trim() && Number(line.rupees) > 0);
+      const total = lines.reduce((sum, line) => sum + Number(line.rupees), 0);
+      if (!lines.length || total <= 0) throw new Error('Fill in the CTC lines with amounts first. A template stores each line as a share of the total.');
+      const shares = lines.map((line) => Math.round((Number(line.rupees) / total) * 10000) / 100);
+      const drift = Math.round((100 - shares.reduce((sum, value) => sum + value, 0)) * 100) / 100;
+      shares[shares.indexOf(Math.max(...shares))] += drift;
+      const existing = this.ctcTemplates.find((item) => item.name.toLowerCase() === this.templateName.trim().toLowerCase());
+      const result = await this.api.post<{ templates: CtcTemplate[] }>('/v1/pay/ctc-templates', {
+        id: existing?.id,
+        name: this.templateName.trim(),
+        lines: lines.map((line, index) => ({ side: line.side, name: line.name.trim(), percent: shares[index], show: line.show !== false })),
+      });
+      this.ctcTemplates = result.templates;
+      this.templateId = result.templates.find((item) => item.name.toLowerCase() === this.templateName.trim().toLowerCase())?.id || '';
+      this.ok = 'Template saved.';
+    });
+  }
+
+  async removeTemplate(): Promise<void> {
+    if (!this.templateId) return;
+    await this.template(async () => {
+      const result = await this.api.post<{ templates: CtcTemplate[] }>('/v1/pay/ctc-templates/delete', { id: this.templateId });
+      this.ctcTemplates = result.templates;
+      this.templateId = '';
+      this.ok = 'Template removed.';
+    });
+  }
+
+  private async template(work: () => Promise<void>): Promise<void> {
+    this.busy = true;
+    this.error = '';
+    this.ok = '';
+    try {
+      await work();
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Could not use the template.';
+    } finally {
+      this.busy = false;
+    }
   }
 
   private async run(message: string, work: () => Promise<unknown>): Promise<void> {

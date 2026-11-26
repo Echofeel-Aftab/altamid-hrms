@@ -237,7 +237,7 @@ const EVENT_ICON: Record<string, string> = {
             <form class="asset-act" (ngSubmit)="assign()">
               <h3><i class="bi bi-box-arrow-up-right"></i> Issue to someone</h3>
               <div class="form-cols is-three">
-                <div><label for="i-code">Employee code</label><input id="i-code" name="code" [(ngModel)]="act['code']" (ngModelChange)="lookup()" placeholder="EMP005" required>@if (who) { <small class="muted md-hint"><i class="bi bi-person-check"></i> {{ who }}</small> }</div>
+                <div><label for="i-code">Employee code</label><input id="i-code" name="code" [(ngModel)]="act['code']" (ngModelChange)="lookup()" placeholder="EMP005 or a name" list="i-people" autocomplete="off" required><datalist id="i-people">@for (person of matches; track person.code) { <option [value]="person.code">{{ person.name }}</option> }</datalist>@if (who) { <small class="muted md-hint"><i class="bi bi-person-check"></i> {{ who }}</small> }</div>
                 <div><label for="i-day">Issued on</label><input id="i-day" name="day" type="date" [max]="today" [(ngModel)]="act['day']"></div>
                 <div>
                   <label for="i-cond">Condition now</label>
@@ -358,6 +358,7 @@ export class AssetsComponent implements OnInit {
   history: HistoryRow[] = [];
   act: Draft = {};
   who = '';
+  matches: Array<{ name: string; code: string; designation?: string }> = [];
   confirm: { action: string; title: string; text: string } | null = null;
   confirmNote = '';
   kindFilter = '';
@@ -642,6 +643,7 @@ export class AssetsComponent implements OnInit {
     this.open = row;
     this.confirm = null;
     this.who = '';
+    this.matches = [];
     this.act = { code: '', day: this.today, condition: row.condition === 'damaged' ? 'good' : row.condition, note: '' };
     this.history = [];
     try {
@@ -657,13 +659,16 @@ export class AssetsComponent implements OnInit {
 
   async lookup(): Promise<void> {
     const code = (this.act['code'] || '').trim();
-    if (code.length < 2) { this.who = ''; return; }
+    if (code.length < 2) { this.who = ''; this.matches = []; return; }
     try {
+      // The colleague directory is the scoped search: it follows the role's directory setting, and the server still checks the code on issue.
       const listed = await this.api.get<{ people: Array<{ name: string; code: string; designation?: string }> }>('/v1/directory?q=' + encodeURIComponent(code));
+      this.matches = listed.people.slice(0, 8);
       const match = listed.people.find((person) => person.code.toLowerCase() === code.toLowerCase());
       this.who = match ? match.name + (match.designation ? ' · ' + match.designation : '') : '';
     } catch {
       this.who = '';
+      this.matches = [];
     }
   }
 

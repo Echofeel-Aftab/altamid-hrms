@@ -6,17 +6,9 @@ import { AccessService } from './access.service';
 import { closeEmployment } from './lifecycle';
 import { PrismaService } from './prisma.service';
 import { SessionUser } from './session';
-import { SettingsService } from './settings.service';
+import { SettingsService, STARTER_TASKS } from './settings.service';
 import { advanceFlow, buildFlow, mayWaitOn, parseFlow, stageOf, waitsOn } from './approval-flow';
 import { notifyPerson } from './people-kit';
-
-const STARTER = [
-  'Collect identity and bank details',
-  'Issue the ID card',
-  'Issue the laptop',
-  'Complete induction',
-  'Confirm the manager',
-];
 
 @Injectable()
 export class DeskService {
@@ -30,18 +22,40 @@ export class DeskService {
     const self = session.employeeId === employeeId;
     const editor = await this.gates.holds(session, 'people.edit');
     if (!self && !editor) fail(403, 'You can open only your own onboarding list.');
-    const person = await this.prisma.employee.findFirst({ where: { id: employeeId, companyId: session.companyId } });
+    const person = await this.prisma.employee.findFirst({
+      where: { id: employeeId, companyId: session.companyId },
+      include: { department: { select: { name: true } }, user: { select: { role: true } } },
+    });
     if (!person) fail(404, 'That person was not found.');
     if (person.status === 'onboarding') {
       const count = await this.prisma.onboardingTask.count({ where: { employeeId } });
       if (!count) {
+        const titles = await this.starterFor(session.companyId, person.user?.role || '', person.department?.name || '');
         await this.prisma.onboardingTask.createMany({
-          data: STARTER.map((title) => ({ companyId: session.companyId, employeeId, title })),
+          data: titles.map((title) => ({ companyId: session.companyId, employeeId, title })),
         });
       }
     }
     const rows = await this.prisma.onboardingTask.findMany({ where: { companyId: session.companyId, employeeId }, orderBy: { title: 'asc' } });
     return { canEdit: editor, items: rows.map((row) => ({ id: row.id, title: row.title, done: row.done })) };
+  }
+
+  /**
+   * The checklist for a new joiner. Company templates are matched by role and department: one that names both
+   * beats one that names either, which beats one that names neither. With no match, the built-in five tasks.
+   */
+  private async starterFor(companyId: string, role: string, department: string): Promise<string[]> {
+    const templates = await this.settings.onboardingTemplates(companyId);
+    const dept = department.trim().toLowerCase();
+    let best: { tasks: string[]; score: number } | null = null;
+    for (const template of templates) {
+      const roleOk = !template.roles.length || (!!role && template.roles.includes(role.toLowerCase()));
+      const deptOk = !template.departments.length || (!!dept && template.departments.some((name) => name.toLowerCase() === dept));
+      if (!roleOk || !deptOk) continue;
+      const score = (template.roles.length ? 1 : 0) + (template.departments.length ? 1 : 0);
+      if (!best || score > best.score) best = { tasks: template.tasks, score };
+    }
+    return best ? best.tasks : STARTER_TASKS;
   }
 
   async addTask(session: SessionUser, employeeId: string, body: unknown) {

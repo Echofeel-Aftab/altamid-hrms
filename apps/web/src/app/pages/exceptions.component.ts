@@ -36,6 +36,7 @@ interface ExceptionView {
       </div>
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
+    @if (ok) { <p class="form-ok">{{ ok }}</p> }
     @if (view) {
       <div class="headcount">
         <article class="card"><strong>{{ view.counts.late }}</strong><span>Late</span></article>
@@ -73,7 +74,12 @@ interface ExceptionView {
                   <span class="muted">{{ row.code }}{{ row.department ? ' · ' + row.department : '' }} · {{ row.detail }}</span>
                   </span>
                 </span>
-                <span class="pill">{{ label(row.flags[0]) }}</span>
+                <span class="ex-actions">
+                  <span class="pill">{{ label(row.flags[0]) }}</span>
+                  @if (!isFuture()) {
+                    <button type="button" class="btn btn-ghost btn-sm" [disabled]="busy === row.id" (click)="regularize(row)" title="Raise a regularization request with the shift times. It still needs approval."><i class="bi bi-clock-history"></i> {{ busy === row.id ? 'Sending…' : 'Regularize' }}</button>
+                  }
+                </span>
               </li>
             }
           </ul>
@@ -81,6 +87,9 @@ interface ExceptionView {
       </section>
     }
   `,
+  styles: [`
+    .ex-actions { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+  `],
 })
 export class ExceptionsComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -88,6 +97,27 @@ export class ExceptionsComponent implements OnInit {
   day = '';
   flag = '';
   error = '';
+  ok = '';
+  busy = '';
+
+  isFuture(): boolean {
+    return this.day > new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  }
+
+  /** The server checks scope, the day and duplicates; this only asks for the request. */
+  async regularize(row: ExceptionRow): Promise<void> {
+    this.error = '';
+    this.ok = '';
+    this.busy = row.id;
+    try {
+      await this.api.post('/v1/attendance/exceptions/regularize', { personId: row.id, day: this.day });
+      this.ok = 'Regularization sent for ' + row.name + ' on ' + this.day + '. It now waits for approval.';
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Could not send the regularization.';
+    } finally {
+      this.busy = '';
+    }
+  }
 
   get shown(): ExceptionRow[] {
     const rows = this.view?.rows || [];
