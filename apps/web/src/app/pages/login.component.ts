@@ -113,53 +113,54 @@ type OtpChannel = 'email' | 'sms';
     .auth-modes {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      align-items: stretch;
       gap: 4px;
+      box-sizing: border-box;
       width: 100%;
       margin: 0 0 18px;
       padding: 4px;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: color-mix(in srgb, var(--navy-800) 5%, var(--card));
+      background: #eef2f6;
     }
     .auth-modes button {
+      box-sizing: border-box;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      min-height: 42px;
+      height: 40px;
       margin: 0;
-      padding: 8px 12px;
+      padding: 0 10px;
       border: 0;
-      border-radius: 9px;
+      border-radius: 8px;
       background: transparent;
-      color: var(--muted);
+      color: var(--navy-800);
       font: inherit;
       font-size: 13.5px;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1;
       cursor: pointer;
-      transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+      transition: background .15s ease, color .15s ease;
     }
-    .auth-modes button i { font-size: 15px; line-height: 1; }
-    .auth-modes button:hover { color: var(--text); }
+    .auth-modes button i { font-size: 15px; line-height: 1; color: inherit; opacity: 0.7; }
+    .auth-modes button:hover { background: rgba(255, 255, 255, 0.7); }
     .auth-modes button.is-on {
       background: var(--navy-800);
       color: #fff;
-      box-shadow: 0 2px 8px rgba(16, 56, 96, 0.22);
     }
-    .auth-modes button.is-on i { color: var(--gold-400); }
+    .auth-modes button.is-on i { color: var(--gold-400); opacity: 1; }
     .auth-modes-sub { margin-top: -6px; margin-bottom: 16px; }
     .auth-card .btn-ghost { margin-top: 10px; width: 100%; }
     :host-context(html.theme-dark) .auth-modes {
       background: #121920;
       border-color: var(--border);
     }
-    :host-context(html.theme-dark) .auth-modes button { color: #c5d0da; }
-    :host-context(html.theme-dark) .auth-modes button:hover { color: #fff; }
+    :host-context(html.theme-dark) .auth-modes button { color: #eef3f8; }
+    :host-context(html.theme-dark) .auth-modes button:hover { background: rgba(255, 255, 255, 0.06); }
     :host-context(html.theme-dark) .auth-modes button.is-on {
       background: var(--gold-500);
       color: #1b222b;
-      box-shadow: none;
     }
     :host-context(html.theme-dark) .auth-modes button.is-on i { color: #1b222b; }
   `],
