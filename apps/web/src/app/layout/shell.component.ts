@@ -96,7 +96,7 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
               }
             </div>
           </div>
-          <form class="topbar-search" role="search" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); openFirst()">
+          <form class="topbar-search" [class.is-open]="mobileSearch" role="search" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); openFirst()">
             <i class="bi bi-search"></i>
             <input type="search" [placeholder]="i18n.t('Search anything in HRMS...')" [value]="query" (input)="onSearch($any($event.target).value)" (focus)="searchOpen = query.trim().length > 0" [attr.aria-label]="i18n.t('Search anything in HRMS...')">
             @if (searchOpen) {
@@ -106,7 +106,7 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
                 } @else {
                   @for (hit of hits; track hit.label + hit.path) {
                     @if (hit.path) {
-                      <a [routerLink]="hit.path" (click)="searchOpen = false; query = ''">
+                      <a [routerLink]="hit.path" (click)="closeSearch()">
                         <i [class]="hit.icon"></i>
                         <span>{{ i18n.t(hit.label) }}<small>{{ i18n.t(hit.group) }}</small></span>
                       </a>
@@ -122,6 +122,9 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
             }
           </form>
           <div class="topbar-actions">
+            <button type="button" class="icon-btn topbar-search-toggle" (click)="$event.stopPropagation(); toggleMobileSearch()" [attr.aria-expanded]="mobileSearch" [attr.aria-label]="i18n.t('Search anything in HRMS...')" [title]="i18n.t('Search anything in HRMS...')">
+              <i class="bi" [class.bi-search]="!mobileSearch" [class.bi-x-lg]="mobileSearch"></i>
+            </button>
             <button type="button" class="icon-btn" (click)="$event.stopPropagation(); openLauncher()" [attr.aria-expanded]="launchOpen" [attr.aria-label]="i18n.t('All modules')" [title]="i18n.t('All modules')">
               <i class="bi bi-grid-3x3-gap-fill"></i>
             </button>
@@ -212,6 +215,12 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
               </button>
               @if (userOpen) {
                 <div class="user-menu">
+                  @if (clock) {
+                    <div class="user-menu-meta">
+                      <strong>{{ clock }}</strong>
+                      <small>{{ dateLabel }}@if (weather) { · {{ weather.temp }}° {{ weather.place }} }</small>
+                    </div>
+                  }
                   <a routerLink="/profile" (click)="userOpen = false"><i class="bi bi-person"></i> My profile</a>
                   <a routerLink="/requests" (click)="userOpen = false"><i class="bi bi-inbox"></i> My requests</a>
                   <a routerLink="/settings" [queryParams]="{ tab: 'password' }" (click)="userOpen = false"><i class="bi bi-shield-lock"></i> Password</a>
@@ -295,6 +304,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   noteTabs: NoteTab[] = [];
   noteTab = 'all';
   searchOpen = false;
+  mobileSearch = false;
   query = '';
   hits: Array<NavItem & { group: string }> = [];
   dark = isDarkTheme();
@@ -487,8 +497,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   openFirst(): void {
     const hit = this.hits.find((item) => item.path);
     if (!hit) return;
-    this.searchOpen = false;
-    this.query = '';
+    this.closeSearch();
     void this.router.navigateByUrl(hit.path);
   }
 
@@ -611,6 +620,21 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.notes = data.items;
   }
 
+  toggleMobileSearch(): void {
+    this.mobileSearch = !this.mobileSearch;
+    if (this.mobileSearch) {
+      window.setTimeout(() => document.querySelector<HTMLInputElement>('.topbar-search input')?.focus(), 30);
+    } else {
+      this.searchOpen = false;
+    }
+  }
+
+  closeSearch(): void {
+    this.searchOpen = false;
+    this.mobileSearch = false;
+    this.query = '';
+  }
+
   @HostListener('document:click')
   closeMenus(): void {
     this.outletOpen = false;
@@ -618,6 +642,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.notesOpen = false;
     this.langOpen = false;
     this.searchOpen = false;
+    this.mobileSearch = false;
   }
 
   paintBrand(): void {
