@@ -83,25 +83,25 @@ const KIND_LABEL: Record<Kind, string> = { insurance: 'Insurance', wellness: 'We
         }
         <div class="mx-blocks">
           @for (block of s.blocks; track block.key) {
-            <section class="card mx-block">
-              <div class="card-head">
-                <h2><span [class]="'mx-block-ico ' + look(block.key).tone"><i class="bi" [class]="look(block.key).icon"></i></span> {{ block.label }}</h2>
-                <strong>{{ block.total ? money(block.total) : '' }}</strong>
-              </div>
-              <p class="muted mx-fine">{{ block.hint }}@if (block.key === 'time') { · shown for information, not added to the total }</p>
-              @if (block.lines.length) {
-                <ul class="mx-lines">
-                  @for (line of block.lines; track $index) {
-                    <li><span>{{ line.label }}@if (line.hint) { <small>{{ line.hint }}</small> }</span><b>{{ line.amount ? money(line.amount) : line.text || 'Included' }}</b></li>
-                  }
-                </ul>
-              } @else {
-                <p class="muted">Nothing here yet.</p>
-              }
-              @if (block.key === 'cash' && s.flex.length) {
-                <p class="mx-fine muted mx-row-gap"><i class="bi bi-sliders2"></i> Your approved choice pay: {{ flexText(s) }}</p>
-              }
-            </section>
+            @if (block.lines.length || block.total) {
+              <section class="card mx-block">
+                <div class="card-head">
+                  <h2><span [class]="'mx-block-ico ' + look(block.key).tone"><i class="bi" [class]="look(block.key).icon"></i></span> {{ block.label }}</h2>
+                  <strong>{{ block.total ? money(block.total) : '' }}</strong>
+                </div>
+                <p class="muted mx-fine">{{ block.hint }}@if (block.key === 'time') { · shown for information, not added to the total }</p>
+                @if (block.lines.length) {
+                  <ul class="mx-lines">
+                    @for (line of block.lines; track $index) {
+                      <li><span>{{ line.label }}@if (line.hint) { <small>{{ line.hint }}</small> }</span><b>{{ line.amount ? money(line.amount) : line.text || 'Included' }}</b></li>
+                    }
+                  </ul>
+                }
+                @if (block.key === 'cash' && s.flex.length) {
+                  <p class="mx-fine muted mx-row-gap"><i class="bi bi-sliders2"></i> Your approved choice pay: {{ flexText(s) }}</p>
+                }
+              </section>
+            }
           }
         </div>
         @if (s.note) { <p class="mx-note"><i class="bi bi-info-circle"></i> {{ s.note }}</p> }

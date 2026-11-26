@@ -24,74 +24,89 @@ interface PayView {
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (view) {
-      <section class="card">
-        <h2><i class="bi bi-pie-chart"></i> CTC breakup</h2>
-        @if (!view.structure) {
-          <p class="muted">Payroll has not published a CTC yet.</p>
-        } @else {
-          <p class="muted">From {{ view.structure.effectiveFrom }}</p>
-          <ul class="pay-lines">
-            @for (line of view.structure.lines; track line.name + line.side) {
-              <li><span>{{ line.name }} <span class="muted">{{ sideLabel(line.side) }}</span></span><strong>{{ line.amount }}</strong></li>
-            }
-            <li class="pay-net"><span>Annual CTC</span><strong>{{ view.structure.annual }}</strong></li>
+      @if (allEmpty) {
+        <section class="card pay-empty-panel">
+          <h2><i class="bi bi-wallet2"></i> Nothing published yet</h2>
+          <ul class="pay-empty-list">
+            <li><strong>CTC breakup</strong><span class="muted">Payroll has not published a CTC yet.</span></li>
+            <li><strong>Monthly breakup</strong><span class="muted">No salary month has been published yet.</span></li>
+            <li><strong>Form 16</strong><span class="muted">No Form 16 has been published yet.</span></li>
           </ul>
-        }
-      </section>
-      <section class="card">
-        <h2><i class="bi bi-calendar3"></i> Monthly breakup</h2>
-        @if (!view.slips.length) {
-          <p class="muted">No salary month has been published yet.</p>
-        } @else {
-          <div class="people-filters">
-            @for (slip of view.slips; track slip.id) {
-              <button type="button" class="btn" [class.btn-primary]="slip.id === selected" [class.btn-ghost]="slip.id !== selected" (click)="selected = slip.id">{{ slip.label }}</button>
+        </section>
+      } @else {
+        <div class="pay-desk">
+          <section class="card">
+            <h2><i class="bi bi-pie-chart"></i> CTC breakup</h2>
+            @if (!view.structure) {
+              <p class="muted">Payroll has not published a CTC yet.</p>
+            } @else {
+              <p class="muted">From {{ view.structure.effectiveFrom }}</p>
+              <ul class="pay-lines">
+                @for (line of view.structure.lines; track line.name + line.side) {
+                  <li><span>{{ line.name }} <span class="muted">{{ sideLabel(line.side) }}</span></span><strong>{{ line.amount }}</strong></li>
+                }
+                <li class="pay-net"><span>Annual CTC</span><strong>{{ view.structure.annual }}</strong></li>
+              </ul>
             }
-          </div>
-          @if (openSlip) {
-            <section class="slip">
-              <header>
-                <div>
-                  <strong>{{ openSlip.label }}</strong>
-                  <p>{{ view.person?.name }}</p>
-                </div>
-              </header>
-              @if (openSlip.facts.length) {
-                <dl class="slip-facts">
-                  @for (fact of openSlip.facts; track fact.label) {
-                    <div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
+          </section>
+          <div class="pay-desk-main">
+            <section class="card">
+              <h2><i class="bi bi-calendar3"></i> Monthly breakup</h2>
+              @if (!view.slips.length) {
+                <p class="muted">No salary month has been published yet.</p>
+              } @else {
+                <div class="people-filters">
+                  @for (slip of view.slips; track slip.id) {
+                    <button type="button" class="btn" [class.btn-primary]="slip.id === selected" [class.btn-ghost]="slip.id !== selected" (click)="selected = slip.id">{{ slip.label }}</button>
                   }
-                </dl>
-              }
-              @for (group of slipGroups(openSlip.lines); track group.side) {
-                <p class="slip-kicker">{{ group.label }}</p>
-                <table>
-                  <tbody>
-                    @for (line of group.lines; track line.name) {
-                      <tr><td>{{ line.name }}</td><td class="amount">{{ line.amount }}</td></tr>
+                </div>
+                @if (openSlip) {
+                  <section class="slip">
+                    <header>
+                      <div>
+                        <strong>{{ openSlip.label }}</strong>
+                        <p>{{ view.person?.name }}</p>
+                      </div>
+                    </header>
+                    @if (openSlip.facts.length) {
+                      <dl class="slip-facts">
+                        @for (fact of openSlip.facts; track fact.label) {
+                          <div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
+                        }
+                      </dl>
                     }
-                  </tbody>
-                </table>
+                    @for (group of slipGroups(openSlip.lines); track group.side) {
+                      <p class="slip-kicker">{{ group.label }}</p>
+                      <table>
+                        <tbody>
+                          @for (line of group.lines; track line.name) {
+                            <tr><td>{{ line.name }}</td><td class="amount">{{ line.amount }}</td></tr>
+                          }
+                        </tbody>
+                      </table>
+                    }
+                    <table>
+                      <tbody><tr class="net"><td>Net pay</td><td class="amount">{{ openSlip.net }}</td></tr></tbody>
+                    </table>
+                    @if (openSlip.note) { <p class="muted">{{ openSlip.note }}</p> }
+                    <p class="muted">Net pay is the earnings minus the deductions payroll entered. A line left off this copy is still part of that net.</p>
+                  </section>
+                }
               }
-              <table>
-                <tbody><tr class="net"><td>Net pay</td><td class="amount">{{ openSlip.net }}</td></tr></tbody>
-              </table>
-              @if (openSlip.note) { <p class="muted">{{ openSlip.note }}</p> }
-              <p class="muted">Net pay is the earnings minus the deductions payroll entered. A line left off this copy is still part of that net.</p>
             </section>
-          }
-        }
-      </section>
-      <section class="card">
-        <h2><i class="bi bi-file-earmark-text"></i> Form 16</h2>
-        @if (!view.forms.length) { <p class="muted">No Form 16 has been published yet.</p> }
-        @for (form of view.forms; track form.id) {
-          <div class="row-between">
-            <strong>Financial year {{ form.year }}</strong>
-            <button type="button" class="btn btn-ghost" (click)="openForm(form.id, form.year)"><i class="bi bi-eye"></i> Preview</button>
+            <section class="card">
+              <h2><i class="bi bi-file-earmark-text"></i> Form 16</h2>
+              @if (!view.forms.length) { <p class="muted">No Form 16 has been published yet.</p> }
+              @for (form of view.forms; track form.id) {
+                <div class="row-between">
+                  <strong>Financial year {{ form.year }}</strong>
+                  <button type="button" class="btn btn-ghost" (click)="openForm(form.id, form.year)"><i class="bi bi-eye"></i> Preview</button>
+                </div>
+              }
+            </section>
           </div>
-        }
-      </section>
+        </div>
+      }
     }
   `,
 })
@@ -104,6 +119,10 @@ export class PayComponent implements OnInit {
 
   get openSlip() {
     return this.view?.slips.find((slip) => slip.id === this.selected) || null;
+  }
+
+  get allEmpty(): boolean {
+    return !!this.view && !this.view.structure && !this.view.slips.length && !this.view.forms.length;
   }
 
   slipGroups(lines: PayLine[]): Array<{ side: string; label: string; lines: PayLine[] }> {

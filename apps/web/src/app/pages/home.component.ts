@@ -141,10 +141,12 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
           <h1>{{ firstName() }}<span>.</span></h1>
           <p class="hb-lead">{{ heroLead() }}</p>
           <div class="hb-stats">
-            <a routerLink="/approvals" [class.is-hot]="data.pending > 0">
-              <i class="bi bi-hourglass-split"></i>
-              <strong>{{ data.pending }}</strong><span>Waiting on you</span>
-            </a>
+            @if (canApprovals()) {
+              <a routerLink="/approvals" [class.is-hot]="data.pending > 0">
+                <i class="bi bi-hourglass-split"></i>
+                <strong>{{ data.pending }}</strong><span>Waiting on you</span>
+              </a>
+            }
             @if (data.attendance) {
               <a routerLink="/attendance">
                 <i class="bi bi-calendar-check"></i>
@@ -158,7 +160,7 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
               </a>
             }
             @if (data.companyToday; as co) {
-              <a routerLink="/exceptions">
+              <a [routerLink]="canExceptions() ? '/exceptions' : '/people'">
                 <i class="bi bi-people"></i>
                 <strong>{{ co.present + co.away }}<em>/{{ co.headcount }}</em></strong><span>Working today</span>
               </a>
@@ -326,12 +328,14 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                     }
                   }
                   @case ('approvals') {
-                    <a class="home-tile" routerLink="/approvals">
-                      <span class="home-tile-ico is-gold"><i class="bi bi-hourglass-split"></i></span>
-                      <small>Waiting on you</small>
-                      <strong>{{ data.pending }}</strong>
-                      <span>{{ data.pending === 1 ? 'Request needs' : 'Requests need' }} a decision</span>
-                    </a>
+                    @if (canApprovals()) {
+                      <a class="home-tile" routerLink="/approvals">
+                        <span class="home-tile-ico is-gold"><i class="bi bi-hourglass-split"></i></span>
+                        <small>Waiting on you</small>
+                        <strong>{{ data.pending }}</strong>
+                        <span>{{ data.pending === 1 ? 'Request needs' : 'Requests need' }} a decision</span>
+                      </a>
+                    }
                   }
                   @case ('month-tally') {
                     <a class="home-tile" routerLink="/attendance">
@@ -948,6 +952,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const d = this.data;
     if (!d) return false;
     switch (key) {
+      case 'approvals':
+        return this.canApprovals();
       case 'month-tally':
       case 'calendar':
         return d.days.length > 0;
@@ -1194,12 +1200,30 @@ export class HomeComponent implements OnInit, OnDestroy {
     return limited.length ? limited.reduce((sum, item) => sum + item.left, 0) : null;
   }
 
+  canApprovals(): boolean {
+    return !!this.store.me?.access?.includes('approvals');
+  }
+
+  canExceptions(): boolean {
+    return !!this.store.me?.access?.includes('exceptions');
+  }
+
   heroLead(): string {
     const pending = this.data?.pending || 0;
-    if (pending) return `${pending} ${pending === 1 ? 'request is' : 'requests are'} waiting for your decision.`;
+    if (this.canApprovals() && pending) {
+      return `${pending} ${pending === 1 ? 'request is' : 'requests are'} waiting for your decision.`;
+    }
+    const access = this.store.me?.access || [];
+    if (access.includes('pay') && this.data?.payrollDesk) {
+      return 'Open Payroll when you are ready to run the month.';
+    }
+    if (access.includes('people') && this.data?.peopleWatch) {
+      return 'Directory and hiring desks are ready when you need them.';
+    }
     const punch = this.data?.attendance;
-    if (punch && !punch.firstIn) return 'You are all caught up. Check in when your day starts.';
+    if (punch && !punch.firstIn) return 'Check in when your day starts, or apply leave if you need time off.';
     if (punch?.state === 'in') return 'You are checked in. Have a productive day.';
+    if (this.leaveLeft() !== null) return 'You are all caught up. Leave and requests are a click away.';
     return 'You are all caught up. Have a good day.';
   }
 

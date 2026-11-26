@@ -93,7 +93,6 @@ interface ApprovalsBoard {
             <button class="btn btn-sm" type="button" [disabled]="busy" (click)="decide(item, 'accepted')">Accept</button>
             <button class="btn btn-ghost btn-sm" type="button" [disabled]="busy" (click)="decide(item, 'declined')">Decline</button>
           } @else if (item.kind === 'details') {
-            <input class="dc-note" [name]="'note-' + item.id" [(ngModel)]="notes[item.id]" placeholder="Reason to reject" aria-label="Reject reason">
             <button class="btn btn-sm" type="button" [disabled]="busy" (click)="decide(item, 'approved')">Approve</button>
             <button class="btn btn-ghost btn-sm btn-danger" type="button" [disabled]="busy" (click)="decide(item, 'rejected')">Reject</button>
           } @else {
@@ -124,6 +123,14 @@ interface ApprovalsBoard {
             </li>
           }
         </ul>
+        @if (tab === 'waiting' && expanded!.canDecide) {
+          <label class="dc-note-label" [attr.for]="'note-' + expanded!.id">Reject reason (optional for approve)</label>
+          <input class="dc-note" [id]="'note-' + expanded!.id" [name]="'note-' + expanded!.id" [(ngModel)]="notes[expanded!.id]" placeholder="Required when you reject" aria-label="Reject reason">
+          <div class="actions">
+            <button class="btn btn-sm" type="button" [disabled]="busy" (click)="decide(expanded!, 'approved')">Approve</button>
+            <button class="btn btn-ghost btn-sm btn-danger" type="button" [disabled]="busy" (click)="decide(expanded!, 'rejected')">Reject</button>
+          </div>
+        }
         <p class="muted"><a [routerLink]="'/people/' + expanded!.employeeId">Open profile</a></p>
       </section>
     }
@@ -133,8 +140,8 @@ interface ApprovalsBoard {
     .approvals-tabs .chip { margin-left: 6px; }
     .approvals-filters { align-items: center; }
     :host ::ng-deep .dt-wrap + .approval-card { margin-top: 16px; }
-    :host ::ng-deep td .dc-note { min-width: 140px; max-width: 180px; height: 32px; margin-right: 6px; }
-    :host ::ng-deep td .btn + .btn { margin-left: 4px; }
+    .dc-note-label { display: block; margin: 12px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+    .approval-card .actions { margin-top: 12px; }
   `],
 })
 export class ApprovalsComponent implements OnInit {

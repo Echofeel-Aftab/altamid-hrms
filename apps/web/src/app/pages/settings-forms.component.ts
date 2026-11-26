@@ -175,13 +175,15 @@ const OP_LABELS: Record<LogicOp, string> = { equals: 'is one of', not_equals: 'i
                     <td>{{ row.fieldCount }}</td>
                     <td>{{ row.submissions }}</td>
                     <td class="muted">{{ day(row.updatedAt) }}</td>
-                    <td class="row-actions">
-                      <button type="button" class="btn btn-ghost btn-sm" (click)="open(row.id)"><i class="bi bi-pencil"></i> Edit</button>
-                      <button type="button" class="btn btn-ghost btn-sm" (click)="duplicate(row.id)" [disabled]="busy"><i class="bi bi-copy"></i> Duplicate</button>
-                      @if (row.status !== 'archived') {
-                        <button type="button" class="btn btn-ghost btn-sm" (click)="showListPreview(row)"><i class="bi bi-eye"></i> Preview</button>
-                        <a class="btn btn-ghost btn-sm" [href]="openHref(row)" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{ row.status === 'published' ? 'Open' : 'New tab' }}</a>
-                      }
+                    <td>
+                      <div class="row-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" (click)="open(row.id)"><i class="bi bi-pencil"></i> Edit</button>
+                        <button type="button" class="btn btn-ghost btn-sm" (click)="duplicate(row.id)" [disabled]="busy"><i class="bi bi-copy"></i> Duplicate</button>
+                        @if (row.status !== 'archived') {
+                          <button type="button" class="btn btn-ghost btn-sm" (click)="showListPreview(row)"><i class="bi bi-eye"></i> Preview</button>
+                          <a class="btn btn-ghost btn-sm" [href]="openHref(row)" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{ row.status === 'published' ? 'Open' : 'New tab' }}</a>
+                        }
+                      </div>
                     </td>
                   </tr>
                 }
