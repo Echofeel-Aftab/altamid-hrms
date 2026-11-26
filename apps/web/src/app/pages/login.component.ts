@@ -51,9 +51,13 @@ type OtpChannel = 'email' | 'sms';
             <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-shield-check"></i> {{ busy ? 'Checking…' : 'Continue' }}</button>
             <button class="btn btn-ghost" type="button" (click)="resetFlow()" [disabled]="busy">Back</button>
           } @else {
-            <div class="chip-row auth-modes" role="tablist" aria-label="Sign-in method">
-              <button type="button" class="chip" [class.is-on]="mode === 'password'" (click)="mode = 'password'">Password</button>
-              <button type="button" class="chip" [class.is-on]="mode === 'otp'" (click)="mode = 'otp'">One-time code</button>
+            <div class="auth-modes" role="tablist" aria-label="Sign-in method">
+              <button type="button" role="tab" [attr.aria-selected]="mode === 'password'" [class.is-on]="mode === 'password'" (click)="mode = 'password'">
+                <i class="bi bi-key" aria-hidden="true"></i> Password
+              </button>
+              <button type="button" role="tab" [attr.aria-selected]="mode === 'otp'" [class.is-on]="mode === 'otp'" (click)="mode = 'otp'">
+                <i class="bi bi-phone" aria-hidden="true"></i> One-time code
+              </button>
             </div>
 
             @if (mode === 'password') {
@@ -74,9 +78,9 @@ type OtpChannel = 'email' | 'sms';
               <a class="auth-forgot" routerLink="/forgot">Forgot password?</a>
               <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi bi-box-arrow-in-right"></i> {{ busy ? 'Signing in…' : 'Sign in' }}</button>
             } @else {
-              <div class="chip-row auth-modes" role="tablist" aria-label="Code channel">
-                <button type="button" class="chip" [class.is-on]="otpChannel === 'email'" (click)="otpChannel = 'email'">Email</button>
-                <button type="button" class="chip" [class.is-on]="otpChannel === 'sms'" (click)="otpChannel = 'sms'">Mobile</button>
+              <div class="auth-modes auth-modes-sub" role="tablist" aria-label="Code channel">
+                <button type="button" role="tab" [attr.aria-selected]="otpChannel === 'email'" [class.is-on]="otpChannel === 'email'" (click)="otpChannel = 'email'">Email</button>
+                <button type="button" role="tab" [attr.aria-selected]="otpChannel === 'sms'" [class.is-on]="otpChannel === 'sms'" (click)="otpChannel = 'sms'">Mobile</button>
               </div>
               @if (!otpSent) {
                 <div class="auth-field">
@@ -106,10 +110,58 @@ type OtpChannel = 'email' | 'sms';
     </div>
   `,
   styles: [`
-    .auth-modes { margin: 0 0 14px; gap: 8px; }
-    .auth-modes .chip { border: 1px solid var(--border); background: transparent; cursor: pointer; font: inherit; }
-    .auth-modes .chip.is-on { border-color: var(--gold-500); background: color-mix(in srgb, var(--gold-500) 18%, transparent); }
+    .auth-modes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      width: 100%;
+      margin: 0 0 18px;
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--navy-800) 5%, var(--card));
+    }
+    .auth-modes button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      margin: 0;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13.5px;
+      font-weight: 700;
+      line-height: 1.2;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+    .auth-modes button i { font-size: 15px; line-height: 1; }
+    .auth-modes button:hover { color: var(--text); }
+    .auth-modes button.is-on {
+      background: var(--navy-800);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(16, 56, 96, 0.22);
+    }
+    .auth-modes button.is-on i { color: var(--gold-400); }
+    .auth-modes-sub { margin-top: -6px; margin-bottom: 16px; }
     .auth-card .btn-ghost { margin-top: 10px; width: 100%; }
+    :host-context(html.theme-dark) .auth-modes {
+      background: #121920;
+      border-color: var(--border);
+    }
+    :host-context(html.theme-dark) .auth-modes button { color: #c5d0da; }
+    :host-context(html.theme-dark) .auth-modes button:hover { color: #fff; }
+    :host-context(html.theme-dark) .auth-modes button.is-on {
+      background: var(--gold-500);
+      color: #1b222b;
+      box-shadow: none;
+    }
+    :host-context(html.theme-dark) .auth-modes button.is-on i { color: #1b222b; }
   `],
 })
 export class LoginComponent implements OnInit {
