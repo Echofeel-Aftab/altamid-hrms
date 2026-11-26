@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CelebrateComponent, FreshBadge } from '../shared/celebrate.component';
 import { PunchClockComponent } from '../shared/punch-clock.component';
+import { AttendanceMonthComponent } from '../shared/attendance-month.component';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { RichEditorComponent, RichViewComponent } from '../shared/rich-editor.component';
 import { ModalComponent } from '../shared/modal.component';
@@ -131,7 +132,7 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, FormsModule, RichViewComponent, RichEditorComponent, ModalComponent, PunchClockComponent, CelebrateComponent, PhotoComponent],
+  imports: [RouterLink, FormsModule, RichViewComponent, RichEditorComponent, ModalComponent, PunchClockComponent, AttendanceMonthComponent, CelebrateComponent, PhotoComponent],
   template: `
     @if (data) {
       <section class="hb" aria-label="Today">
@@ -529,31 +530,7 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                     </section>
                   }
                   @case ('calendar') {
-                    <section class="card dash-card dash-cal">
-                      <div class="card-head">
-                        <h2><i class="bi bi-calendar3"></i> {{ monthLabel() }}</h2>
-                        <a routerLink="/attendance"><i class="bi bi-box-arrow-up-right"></i> Open calendar</a>
-                      </div>
-                      <div class="home-month">
-                        <div class="cal-grid home-cal" aria-label="This month">
-                          @for (name of dow; track $index) { <span class="cal-dow">{{ name }}</span> }
-                          @for (blank of blanks; track blank) { <span class="cal-day is-pad"></span> }
-                          @for (day of data.days; track day.day) {
-                            <a class="cal-day" [class]="'cal-day is-' + day.status + (day.day === data.today ? ' is-today' : '')" [routerLink]="'/attendance'" [attr.title]="day.label || 'Open'">
-                              <strong>{{ dayNum(day.day) }}</strong>
-                              <i></i>
-                            </a>
-                          }
-                        </div>
-                        <ul class="cal-legend">
-                          <li><i class="is-present"></i> Present</li>
-                          <li><i class="is-absent"></i> Absent</li>
-                          <li><i class="is-leave"></i> Leave</li>
-                          <li><i class="is-holiday"></i> Holiday</li>
-                          <li><i class="is-pending"></i> Waiting</li>
-                        </ul>
-                      </div>
-                    </section>
+                    <app-attendance-month [compact]="true" [month]="data.month" (changed)="refreshAfterCalendar()" />
                   }
                   @case ('leave') {
                     <section class="card dash-card">
@@ -1309,6 +1286,10 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   dayNum(day: string): string {
     return String(Number(day.slice(8)));
+  }
+
+  refreshAfterCalendar(): void {
+    void this.load();
   }
 
   leftShare(item: LeaveBalance): number {

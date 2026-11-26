@@ -1020,10 +1020,22 @@ a.cal-day { display: block; text-decoration: none; }
 .home-cal .cal-day.is-future strong,
 .home-cal .cal-day.is-weekoff strong { color: var(--muted); font-weight: 600; }
 .home-cal .cal-day.is-today strong { background: var(--gold-500); color: #103860; }
+.home-cal .cal-day.is-selected strong {
+  box-shadow: 0 0 0 2px var(--gold-500); background: color-mix(in srgb, var(--gold-500) 28%, var(--card));
+}
+.home-cal button.cal-day { font: inherit; width: 100%; }
 html.theme-dark .home-cal .cal-day strong { color: #fff; }
 html.theme-dark .home-cal .cal-day.is-future strong,
 html.theme-dark .home-cal .cal-day.is-weekoff strong { color: #8ea0b0; }
 html.theme-dark .home-cal .cal-day.is-today strong { color: #103860; }
+html.theme-dark .home-cal .cal-day.is-selected strong {
+  background: color-mix(in srgb, var(--gold-500) 28%, #151c26); color: #fff;
+}
+.home-box[data-key="calendar"] > app-attendance-month { height: 100%; display: block; }
+.home-box[data-key="calendar"] .att-month.is-compact {
+  height: 100%;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 26px -18px color-mix(in srgb, var(--tone) 60%, transparent);
+}
 .mini-now {
   flex: 1; min-width: 180px; max-width: 240px; margin-left: auto;
   padding: 16px 18px; border-radius: 16px; background: var(--navy-800); color: #fff;
