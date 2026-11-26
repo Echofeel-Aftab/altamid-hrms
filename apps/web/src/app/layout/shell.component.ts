@@ -98,8 +98,10 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
             </div>
           </div>
           <form class="topbar-search" [class.is-open]="mobileSearch" role="search" (click)="$event.stopPropagation()" (submit)="$event.preventDefault(); openFirst()">
-            <i class="bi bi-search"></i>
-            <input type="search" [placeholder]="i18n.t('Search anything in HRMS...')" [value]="query" (input)="onSearch($any($event.target).value)" (focus)="searchOpen = query.trim().length > 0" [attr.aria-label]="i18n.t('Search anything in HRMS...')">
+            <label class="topbar-search-field">
+              <i class="bi bi-search" aria-hidden="true"></i>
+              <input type="search" [placeholder]="i18n.t('Search anything in HRMS...')" [value]="query" (input)="onSearch($any($event.target).value)" (focus)="searchOpen = query.trim().length > 0" [attr.aria-label]="i18n.t('Search anything in HRMS...')">
+            </label>
             @if (searchOpen) {
               <div class="search-results">
                 @if (!hits.length) {
