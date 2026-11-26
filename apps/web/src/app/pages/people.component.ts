@@ -5,10 +5,11 @@ import { ApiService } from '../core/api.service';
 import { Person } from '../core/models';
 import { SessionStore } from '../core/session.store';
 import { DataColumn, DataTableComponent } from '../shared/data-table.component';
+import { ListingFilterItem, ListingFiltersComponent } from '../shared/listing-filters.component';
 
 @Component({
   selector: 'app-people',
-  imports: [FormsModule, RouterLink, DataTableComponent],
+  imports: [FormsModule, RouterLink, DataTableComponent, ListingFiltersComponent],
   template: `
     <div class="page-head">
       <div><span class="page-mark" aria-hidden="true"><i class="bi bi-people"></i></span><p class="eyebrow">Directory</p><h1>People</h1><p class="muted">The first 100 records load. Search to find anyone in a larger company.</p></div>
@@ -19,22 +20,16 @@ import { DataColumn, DataTableComponent } from '../shared/data-table.component';
     } @else {
     @if (error) { <p class="form-error">{{ error }}</p> }
     <app-data-table tableId="people" empty="No one matches that filter." [rows]="people" [columns]="columns" [loading]="loading">
-      <div tableFilter class="people-filters">
-        <label class="sr" for="people-q">Search</label>
-        <input id="people-q" [(ngModel)]="query" placeholder="Name, code, or department" (keyup.enter)="load()">
+      <div tableFilter class="people-toolbar-filters">
+        <label class="sr" for="people-q">Directory search</label>
+        <input id="people-q" class="listing-bar-filter is-search" [(ngModel)]="query" placeholder="Name, code, or department" (keyup.enter)="load()">
         <button class="btn btn-ghost btn-sm" type="button" (click)="load()"><i class="bi bi-search"></i> Search</button>
-        <label class="sr" for="people-dept">Department</label>
-        <select id="people-dept" [ngModel]="department" (ngModelChange)="pick('department', $event)">
-          <option value="">All departments</option>
-          @for (name of departments; track name) { <option [value]="name">{{ name }}</option> }
-        </select>
-        <label class="sr" for="people-status">Status</label>
-        <select id="people-status" [ngModel]="status" (ngModelChange)="pick('status', $event)">
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="onboarding">Onboarding</option>
-          <option value="exited">Exited</option>
-        </select>
+        <app-listing-filters
+          storageKey="people"
+          [catalog]="filterCatalog"
+          [values]="filterValues"
+          (valuesChange)="onFilters($event)"
+          (changed)="load()" />
       </div>
     </app-data-table>
     }
@@ -48,8 +43,36 @@ export class PeopleComponent implements OnInit {
   department = '';
   query = '';
   status = '';
+  filterValues: Record<string, string> = { department: '', status: '' };
   error = '';
   loading = true;
+
+  get filterCatalog(): ListingFilterItem[] {
+    return [
+      {
+        key: 'department',
+        label: 'Departments',
+        allLabel: 'All departments',
+        options: this.departments.map((name) => ({ value: name, label: name })),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        allLabel: 'All statuses',
+        options: [
+          { value: 'active', label: 'Active' },
+          { value: 'onboarding', label: 'Onboarding' },
+          { value: 'exited', label: 'Exited' },
+        ],
+      },
+    ];
+  }
+
+  onFilters(values: Record<string, string>): void {
+    this.filterValues = values;
+    this.department = values['department'] || '';
+    this.status = values['status'] || '';
+  }
 
   readonly columns: DataColumn<Person>[] = [
     { key: 'name', label: 'Person', text: (row) => row.name, sub: (row) => row.workerType, link: (row) => '/people/' + row.id, person: (row) => ({ id: row.id, name: row.name }) },
@@ -78,12 +101,6 @@ export class PeopleComponent implements OnInit {
       return;
     }
     await this.load();
-  }
-
-  pick(field: 'department' | 'status', value: string): void {
-    if (this[field] === value) return;
-    this[field] = value;
-    void this.load();
   }
 
   async load(): Promise<void> {

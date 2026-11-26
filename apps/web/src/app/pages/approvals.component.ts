@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { DataColumn, DataTableComponent, RowActionsDirective } from '../shared/data-table.component';
+import { ListingFilterItem, ListingFiltersComponent } from '../shared/listing-filters.component';
 
 type ApprovalKind = 'leave' | 'attendance' | 'resignation' | 'details' | '';
 type BoardTab = 'waiting' | 'history';
@@ -44,7 +45,7 @@ interface ApprovalsBoard {
 
 @Component({
   selector: 'app-approvals',
-  imports: [DataTableComponent, RowActionsDirective, FormsModule, RouterLink],
+  imports: [DataTableComponent, RowActionsDirective, FormsModule, RouterLink, ListingFiltersComponent],
   template: `
     <div class="page-head">
       <div>
@@ -74,15 +75,13 @@ interface ApprovalsBoard {
       [rows]="visible"
       [columns]="columns"
       [loading]="loading">
-      <div tableFilter class="people-filters approvals-filters">
-        <label class="sr" for="appr-kind">Type</label>
-        <select id="appr-kind" [(ngModel)]="kind" (ngModelChange)="applyFilter()">
-          <option value="">All types</option>
-          <option value="leave">Leave{{ counts.leave && tab === 'waiting' ? ' (' + counts.leave + ')' : '' }}</option>
-          <option value="attendance">Attendance{{ counts.attendance && tab === 'waiting' ? ' (' + counts.attendance + ')' : '' }}</option>
-          <option value="resignation">Resignation{{ counts.resignation && tab === 'waiting' ? ' (' + counts.resignation + ')' : '' }}</option>
-          <option value="details">Pay details{{ counts.details && tab === 'waiting' ? ' (' + counts.details + ')' : '' }}</option>
-        </select>
+      <div tableFilter>
+        <app-listing-filters
+          storageKey="approvals-board"
+          [catalog]="filterCatalog"
+          [values]="filterValues"
+          (valuesChange)="onFilters($event)"
+          (changed)="applyFilter()" />
       </div>
       <ng-template appRowActions let-item>
         @if (item.kind === 'details' && item.fields?.length) {
@@ -138,7 +137,6 @@ interface ApprovalsBoard {
   styles: [`
     .approvals-tabs { margin: 0 0 16px; }
     .approvals-tabs .chip { margin-left: 6px; }
-    .approvals-filters { align-items: center; }
     :host ::ng-deep .dt-wrap + .approval-card { margin-top: 16px; }
     .dc-note-label { display: block; margin: 12px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
     .approval-card .actions { margin-top: 12px; }
@@ -152,12 +150,29 @@ export class ApprovalsComponent implements OnInit {
   counts: ApprovalsBoard['counts'] = { waiting: 0, leave: 0, attendance: 0, resignation: 0, details: 0, history: 0 };
   tab: BoardTab = 'waiting';
   kind: ApprovalKind = '';
+  filterValues: Record<string, string> = { kind: '' };
   error = '';
   loading = true;
   ok = '';
   busy = false;
   notes: Record<string, string> = {};
   expanded: ApprovalRow | null = null;
+
+  get filterCatalog(): ListingFilterItem[] {
+    const waiting = this.tab === 'waiting';
+    const tally = (n: number) => (waiting && n ? ` (${n})` : '');
+    return [{
+      key: 'kind',
+      label: 'Types',
+      allLabel: 'All types',
+      options: [
+        { value: 'leave', label: 'Leave' + tally(this.counts.leave) },
+        { value: 'attendance', label: 'Attendance' + tally(this.counts.attendance) },
+        { value: 'resignation', label: 'Resignation' + tally(this.counts.resignation) },
+        { value: 'details', label: 'Pay details' + tally(this.counts.details) },
+      ],
+    }];
+  }
 
   readonly columns: DataColumn<ApprovalRow>[] = [
     { key: 'person', label: 'Person', text: (row) => row.person, sub: (row) => row.personCode, person: (row) => ({ code: row.personCode, name: row.person }), link: (row) => '/people/' + row.employeeId },
@@ -183,6 +198,11 @@ export class ApprovalsComponent implements OnInit {
   setTab(tab: BoardTab): void {
     this.tab = tab;
     this.applyFilter();
+  }
+
+  onFilters(values: Record<string, string>): void {
+    this.filterValues = values;
+    this.kind = (values['kind'] || '') as ApprovalKind;
   }
 
   applyFilter(): void {

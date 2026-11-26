@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { DataColumn, DataTableComponent, RowActionsDirective } from '../shared/data-table.component';
+import { ListingFilterItem, ListingFiltersComponent } from '../shared/listing-filters.component';
 import { ModalComponent } from '../shared/modal.component';
 import { Sweet } from '../shared/sweet';
 
@@ -52,7 +53,7 @@ export function scoreLabel(score: number | null | undefined): string {
 
 @Component({
   selector: 'app-applications',
-  imports: [RouterLink, FormsModule, DataTableComponent, RowActionsDirective, ModalComponent],
+  imports: [RouterLink, FormsModule, DataTableComponent, RowActionsDirective, ModalComponent, ListingFiltersComponent],
   template: `
     <div class="page-head">
       <div>
@@ -70,7 +71,7 @@ export function scoreLabel(score: number | null | undefined): string {
 
     <div class="appl-stats">
       @for (tile of tiles(); track tile.key) {
-        <button type="button" class="card bento-stat appl-stat" [class.is-on]="statusFilter === tile.key" (click)="statusFilter = statusFilter === tile.key ? '' : tile.key">
+        <button type="button" class="card bento-stat appl-stat" [class.is-on]="statusFilter === tile.key" (click)="pickStatusTile(tile.key)">
           <span class="bento-ico" [class]="'bento-ico ' + tile.tone"><i class="bi" [class]="tile.icon"></i></span>
           <span class="muted">{{ tile.label }}</span>
           <strong>{{ tile.count }}</strong>
@@ -79,20 +80,12 @@ export function scoreLabel(score: number | null | undefined): string {
     </div>
 
     <app-data-table tableId="hiring-applications" title="Received" empty="No applications match." [rows]="filtered()" [columns]="columns" [loading]="loading">
-      <div tableFilter class="asset-filter">
-        <select [(ngModel)]="statusFilter" aria-label="Status">
-          <option value="">Every status</option>
-          <option value="repeat">Repeat applicants</option>
-          @for (status of statuses; track status.key) { <option [value]="status.key">{{ status.label }}</option> }
-        </select>
-        <select [(ngModel)]="jobFilter" aria-label="Job">
-          <option value="">Every job</option>
-          @for (job of jobs(); track job.key) { <option [value]="job.key">{{ job.label }}</option> }
-        </select>
-        <select [(ngModel)]="sourceFilter" aria-label="Source">
-          <option value="">Every source</option>
-          @for (source of sources(); track source) { <option [value]="source">{{ source }}</option> }
-        </select>
+      <div tableFilter>
+        <app-listing-filters
+          storageKey="hiring-applications"
+          [catalog]="filterCatalog"
+          [values]="filterValues"
+          (valuesChange)="onFilters($event)" />
       </div>
       <ng-template appRowActions let-item>
         <a class="btn btn-sm" [routerLink]="['/hiring/applications', item.id]"><i class="bi bi-person-vcard"></i> Details</a>
@@ -148,6 +141,45 @@ export class ApplicationsComponent implements OnInit {
   statusFilter = '';
   jobFilter = '';
   sourceFilter = '';
+  filterValues: Record<string, string> = { status: '', job: '', source: '' };
+
+  get filterCatalog(): ListingFilterItem[] {
+    return [
+      {
+        key: 'status',
+        label: 'Status',
+        allLabel: 'Every status',
+        options: [
+          { value: 'repeat', label: 'Repeat applicants' },
+          ...this.statuses.map((status) => ({ value: status.key, label: status.label })),
+        ],
+      },
+      {
+        key: 'job',
+        label: 'Jobs',
+        allLabel: 'Every job',
+        options: this.jobs().map((job) => ({ value: job.key, label: job.label })),
+      },
+      {
+        key: 'source',
+        label: 'Sources',
+        allLabel: 'Every source',
+        options: this.sources().map((source) => ({ value: source, label: source })),
+      },
+    ];
+  }
+
+  onFilters(values: Record<string, string>): void {
+    this.filterValues = values;
+    this.statusFilter = values['status'] || '';
+    this.jobFilter = values['job'] || '';
+    this.sourceFilter = values['source'] || '';
+  }
+
+  pickStatusTile(key: string): void {
+    const status = this.statusFilter === key ? '' : key;
+    this.onFilters({ ...this.filterValues, status });
+  }
   rulesOpen = false;
   rules: HiringRules | null = null;
   savingRules = false;

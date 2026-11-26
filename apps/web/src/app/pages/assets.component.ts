@@ -2,6 +2,7 @@ import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
 import { DataColumn, DataTableComponent, RowActionsDirective } from '../shared/data-table.component';
+import { ListingFilterItem, ListingFiltersComponent } from '../shared/listing-filters.component';
 import { PhotoComponent } from '../shared/photo.component';
 import { ModalComponent } from '../shared/modal.component';
 import { PasswordToggleDirective } from '../shared/password-toggle.directive';
@@ -71,7 +72,7 @@ const EVENT_ICON: Record<string, string> = {
 
 @Component({
   selector: 'app-assets',
-  imports: [FormsModule, PhotoComponent, DataTableComponent, RowActionsDirective, ModalComponent, PasswordToggleDirective],
+  imports: [FormsModule, PhotoComponent, DataTableComponent, RowActionsDirective, ModalComponent, PasswordToggleDirective, ListingFiltersComponent],
   template: `
     <div class="page-head">
       <div>
@@ -300,16 +301,12 @@ const EVENT_ICON: Record<string, string> = {
 
     @if (manage && !editing) {
       <app-data-table tableId="assets" title="Asset register" [rows]="filtered" [columns]="columns" empty="No assets yet. Add the first one to start the register." [loading]="loading">
-        <div tableFilter class="asset-filter">
-          <select [(ngModel)]="kindFilter" aria-label="Kind">
-            <option value="">All kinds</option>
-            @for (item of kinds; track item.key) { <option [value]="item.key">{{ item.label }}</option> }
-          </select>
-          <select [(ngModel)]="statusFilter" aria-label="Status">
-            <option value="">Every status</option>
-            <option value="issued">Issued</option><option value="stock">In stock</option><option value="repair">In repair</option>
-            <option value="retired">Retired</option><option value="lost">Lost</option>
-          </select>
+        <div tableFilter>
+          <app-listing-filters
+            storageKey="assets"
+            [catalog]="filterCatalog"
+            [values]="filterValues"
+            (valuesChange)="onFilters($event)" />
         </div>
         <ng-template appRowActions let-item>
           <button type="button" class="btn btn-sm" (click)="show(item)"><i class="bi bi-eye"></i> Open</button>
@@ -363,6 +360,36 @@ export class AssetsComponent implements OnInit {
   confirmNote = '';
   kindFilter = '';
   statusFilter = '';
+  filterValues: Record<string, string> = { kind: '', status: '' };
+
+  get filterCatalog(): ListingFilterItem[] {
+    return [
+      {
+        key: 'kind',
+        label: 'Kinds',
+        allLabel: 'All kinds',
+        options: this.kinds.map((item) => ({ value: item.key, label: item.label })),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        allLabel: 'Every status',
+        options: [
+          { value: 'issued', label: 'Issued' },
+          { value: 'stock', label: 'In stock' },
+          { value: 'repair', label: 'In repair' },
+          { value: 'retired', label: 'Retired' },
+          { value: 'lost', label: 'Lost' },
+        ],
+      },
+    ];
+  }
+
+  onFilters(values: Record<string, string>): void {
+    this.filterValues = values;
+    this.kindFilter = values['kind'] || '';
+    this.statusFilter = values['status'] || '';
+  }
   error = '';
   ok = '';
   loading = true;

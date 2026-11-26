@@ -43,8 +43,9 @@ export class RowActionsDirective<T> {
                 <option [ngValue]="size">{{ size }}</option>
               }
             </select>
-            entries
+            <span class="dt-length-word">entries</span>
           </label>
+          <ng-content select="[tableFilter]" />
         </div>
         <div class="dt-toolbar-right">
           @if (hideable.length) {
@@ -77,9 +78,6 @@ export class RowActionsDirective<T> {
             <button type="button" class="btn btn-ghost btn-sm" (click)="reset()">Reset</button>
           }
         </div>
-      </div>
-      <div class="dt-filter">
-        <ng-content select="[tableFilter]" />
       </div>
       <div class="table-responsive" [attr.aria-busy]="loading || null">
         @if (loading) {
