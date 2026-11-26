@@ -60,6 +60,7 @@ interface DetailValues { fields: Record<string, string>; secrets: Record<string,
 interface Stats { total: number; issued: number; stock: number; repair: number; value: string; warranty: number }
 interface HistoryRow { id: string; kind: string; day: string; detail: string; by: string }
 type Draft = Record<string, string>;
+type AssetEditTab = 'identity' | 'details' | 'purchase' | 'place';
 
 const BLANK: Draft = {
   name: '', tag: '', kind: 'laptop', brand: '', model: '', serialNo: '', specs: '', condition: 'new', purchasedOn: '',
@@ -101,12 +102,29 @@ const EVENT_ICON: Record<string, string> = {
 
     @if (editing) {
       <form class="form-stack" (ngSubmit)="save()">
+        <div class="seg-tabs page-tabs" role="tablist" aria-label="Asset sections">
+          <button type="button" role="tab" [attr.aria-selected]="editTab === 'identity'" [class.is-on]="editTab === 'identity'" (click)="setEditTab('identity')">
+            <i class="bi bi-tag"></i> Identity
+          </button>
+          @if (kindDetails.fields.length) {
+            <button type="button" role="tab" [attr.aria-selected]="editTab === 'details'" [class.is-on]="editTab === 'details'" (click)="setEditTab('details')">
+              <i class="bi bi-card-list"></i> Details
+            </button>
+          }
+          <button type="button" role="tab" [attr.aria-selected]="editTab === 'purchase'" [class.is-on]="editTab === 'purchase'" (click)="setEditTab('purchase')">
+            <i class="bi bi-receipt"></i> Purchase
+          </button>
+          <button type="button" role="tab" [attr.aria-selected]="editTab === 'place'" [class.is-on]="editTab === 'place'" (click)="setEditTab('place')">
+            <i class="bi bi-geo-alt"></i> Place
+          </button>
+        </div>
+        @if (editTab === 'identity') {
         <section class="form-section">
           <header><span class="bento-ico"><i class="bi" [class]="kindOf(draft['kind']).icon"></i></span><div><h2>{{ editing === 'new' ? 'Add an asset' : 'Edit ' + draft['tag'] }}</h2><p>What it is and how to recognise it.</p></div></header>
           <div class="form-cols is-three">
             <div>
               <label for="a-kind">Kind</label>
-              <select id="a-kind" name="kind" [(ngModel)]="draft['kind']" (ngModelChange)="detailErrors = {}">
+              <select id="a-kind" name="kind" [(ngModel)]="draft['kind']" (ngModelChange)="onKindChange()">
                 @for (group of groups; track group) {
                   <optgroup [label]="group">
                     @for (item of kindsIn(group); track item.key) { <option [value]="item.key">{{ item.label }}</option> }
@@ -126,7 +144,8 @@ const EVENT_ICON: Record<string, string> = {
             <div class="span-3"><label for="a-specs">{{ isLicence ? 'Description' : 'Specs or description' }}</label><input id="a-specs" name="specs" [(ngModel)]="draft['specs']" [placeholder]="isLicence ? 'Who uses it and what for' : 'Anything not covered below'"></div>
           </div>
         </section>
-        @if (kindDetails.fields.length) {
+        }
+        @if (editTab === 'details' && kindDetails.fields.length) {
           <section class="form-section">
             <header><span class="bento-ico is-gold"><i class="bi" [class]="kindOf(draft['kind']).icon"></i></span><div><h2>{{ kindDetails.title }}</h2><p>{{ kindDetails.lead }}</p></div></header>
             <div class="form-cols is-three">
@@ -158,6 +177,7 @@ const EVENT_ICON: Record<string, string> = {
             </div>
           </section>
         }
+        @if (editTab === 'purchase') {
         <section class="form-section">
           <header><span class="bento-ico is-gold"><i class="bi bi-receipt"></i></span><div><h2>Purchase and warranty</h2><p>Only people who manage assets see the cost, vendor, and invoice.</p></div></header>
           <div class="form-cols is-three">
@@ -168,6 +188,8 @@ const EVENT_ICON: Record<string, string> = {
             <div><label for="a-invoice">Invoice number</label><input id="a-invoice" name="invoiceNo" [(ngModel)]="draft['invoiceNo']"></div>
           </div>
         </section>
+        }
+        @if (editTab === 'place') {
         <section class="form-section">
           <header><span class="bento-ico"><i class="bi bi-geo-alt"></i></span><div><h2>Place and condition</h2><p>Where it is kept and the state it is in.</p></div></header>
           <div class="form-cols is-three">
@@ -187,6 +209,7 @@ const EVENT_ICON: Record<string, string> = {
             <div class="span-3"><label for="a-note">Note</label><textarea id="a-note" name="note" rows="2" [(ngModel)]="draft['note']" placeholder="Accessories included, a scratch on the lid, licence key location"></textarea></div>
           </div>
         </section>
+        }
         <div class="form-bar">
           <span class="muted"><i class="bi bi-info-circle"></i> {{ editing === 'new' ? 'It goes into stock. Issue it to someone after you save.' : 'Changes are written to the asset history.' }}</span>
           <div class="actions">
@@ -344,6 +367,8 @@ const EVENT_ICON: Record<string, string> = {
 })
 export class AssetsComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly editTabKey = 'altamid.assets.editTab';
+  editTab: AssetEditTab = 'identity';
   items: AssetRow[] = [];
   kinds: Kind[] = [];
   locations: Array<{ id: string; name: string }> = [];
@@ -612,11 +637,34 @@ export class AssetsComponent implements OnInit {
     await this.load();
   }
 
+  setEditTab(tab: AssetEditTab): void {
+    this.editTab = tab;
+    try { sessionStorage.setItem(this.editTabKey, tab); } catch { /* ignore */ }
+  }
+
+  onKindChange(): void {
+    this.detailErrors = {};
+    this.normalizeEditTab();
+  }
+
+  private restoreEditTab(): void {
+    try {
+      const saved = sessionStorage.getItem(this.editTabKey) as AssetEditTab | null;
+      if (saved && ['identity', 'details', 'purchase', 'place'].includes(saved)) this.editTab = saved;
+    } catch { /* ignore */ }
+    this.normalizeEditTab();
+  }
+
+  private normalizeEditTab(): void {
+    if (this.editTab === 'details' && !this.kindDetails.fields.length) this.editTab = 'identity';
+  }
+
   startAdd(): void {
     this.open = null;
     this.draft = { ...BLANK };
     this.resetDetails({});
     this.editing = 'new';
+    this.restoreEditTab();
     this.clearNotes();
   }
 
@@ -628,6 +676,7 @@ export class AssetsComponent implements OnInit {
     };
     this.resetDetails(this.detailValues[row.id]?.fields || {});
     this.editing = row.id;
+    this.restoreEditTab();
     this.clearNotes();
   }
 

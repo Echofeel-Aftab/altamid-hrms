@@ -83,6 +83,17 @@ const GROUP_ICONS: Record<string, string> = {
         </section>
       }
 
+      @if (view.index.length > 1) {
+        <div class="seg-tabs page-tabs" role="tablist" aria-label="Manual areas">
+          @for (block of view.index; track block.group) {
+            <button type="button" role="tab" [attr.aria-selected]="tab === block.group" [class.is-on]="tab === block.group" (click)="setTab(block.group)">
+              <i class="bi" [class]="icon(block.group)"></i> {{ block.group }}
+              @if (visibleIn(block.group).length) { <span class="chip">{{ visibleIn(block.group).length }}</span> }
+            </button>
+          }
+        </div>
+      }
+
       <div class="um-layout">
         <aside class="um-toc">
           <div class="um-search">
@@ -91,7 +102,7 @@ const GROUP_ICONS: Record<string, string> = {
           </div>
           <nav aria-label="Manual index">
             @for (block of view.index; track block.group) {
-              @if (visibleIn(block.group).length) {
+              @if (block.group === tab && visibleIn(block.group).length) {
                 <div class="um-toc-group">
                   <h3><i class="bi" [class]="icon(block.group)"></i> {{ block.group }}</h3>
                   <ul>
@@ -107,7 +118,7 @@ const GROUP_ICONS: Record<string, string> = {
 
         <div class="um-body">
           @for (block of view.index; track block.group) {
-            @if (visibleIn(block.group).length) {
+            @if (block.group === tab && visibleIn(block.group).length) {
               <h2 class="um-group"><i class="bi" [class]="icon(block.group)"></i> {{ block.group }}</h2>
               @for (section of visibleIn(block.group); track section.id) {
                 <article class="card um-section" [id]="'um-' + section.id">
@@ -147,8 +158,8 @@ const GROUP_ICONS: Record<string, string> = {
               }
             }
           }
-          @if (!matches().length) {
-            <section class="card"><p class="muted">Nothing in your manual matches "{{ query }}".</p></section>
+          @if (!visibleIn(tab).length) {
+            <section class="card"><p class="muted">@if (query) { Nothing in {{ tab }} matches "{{ query }}". } @else { No topics in this area for your access. }</p></section>
           }
         </div>
       </div>
@@ -159,10 +170,12 @@ const GROUP_ICONS: Record<string, string> = {
 })
 export class ManualComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly tabKey = 'altamid.manual.tab';
   view: ManualView | null = null;
   role = '';
   query = '';
   active = '';
+  tab = '';
   error = '';
   busy = false;
 
@@ -170,12 +183,33 @@ export class ManualComponent implements OnInit {
     await this.load();
   }
 
+  setTab(group: string): void {
+    this.tab = group;
+    try { sessionStorage.setItem(this.tabKey, group); } catch { /* ignore */ }
+  }
+
   async load(): Promise<void> {
     this.error = '';
     try {
       this.view = await this.api.get<ManualView>('/v1/manual' + (this.role ? '?role=' + encodeURIComponent(this.role) : ''));
+      this.syncTab();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'The manual could not be prepared.';
+    }
+  }
+
+  private syncTab(): void {
+    const groups = this.view?.index.map((block) => block.group) || [];
+    if (!groups.length) {
+      this.tab = '';
+      return;
+    }
+    try {
+      const saved = sessionStorage.getItem(this.tabKey);
+      if (saved && groups.includes(saved)) this.tab = saved;
+      else this.tab = groups[0];
+    } catch {
+      this.tab = groups[0];
     }
   }
 

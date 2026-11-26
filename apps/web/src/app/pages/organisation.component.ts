@@ -5,110 +5,142 @@ import { Org } from '../core/models';
 import { SessionStore } from '../core/session.store';
 import { OrgChartComponent } from '../shared/org-chart.component';
 
+type OrgTab = 'chart' | 'structure' | 'teams';
+
 @Component({
   selector: 'app-organisation',
   imports: [FormsModule, OrgChartComponent],
   template: `
-    <div class="page-head"><div><span class="page-mark" aria-hidden="true"><i class="bi bi-diagram-3"></i></span><p class="eyebrow">Structure</p><h1>Organisation</h1><p class="lede">The ladder runs from the owner down to the newest hire. A role decides the privilege. A department grant covers everyone in that department, including IT, admin, and maintenance. Teams sit inside a department. The chart shows the reporting line, up to 400 people at a time.</p></div></div>
-    @if (org?.chartLimited) { <p class="banner">This company has more people than the chart can draw at once. Use People search, teams, and the ladder.</p> }
-    @if (error) { <p class="form-error">{{ error }}</p> }
-    @if (org?.counts) {
-      <div class="headcount">
-        <article class="card"><strong>{{ org?.counts?.active }}</strong><span>Active</span></article>
-        <article class="card"><strong>{{ org?.counts?.onboarding }}</strong><span>Onboarding</span></article>
-        <article class="card"><strong>{{ org?.counts?.exited }}</strong><span>Exited</span></article>
-        <article class="card"><strong>{{ org?.counts?.departments?.length }}</strong><span>Departments</span></article>
+    <div class="page-head">
+      <div>
+        <span class="page-mark" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+        <p class="eyebrow">Structure</p>
+        <h1>Organisation</h1>
+        <p class="lede">{{ tabLede }}</p>
       </div>
-      <section class="card">
-        <h2><i class="bi bi-diagram-2"></i> Reporting line</h2>
-        <div class="split-stats">
-          <div>
-            <h3>By department</h3>
-            <ul class="plain">
-              @for (row of org?.counts?.departments || []; track row.name) {
-                <li><span>{{ row.name }}</span><strong>{{ row.count }}</strong></li>
-              }
-            </ul>
-          </div>
-          <div>
-            <h3>By location</h3>
-            <ul class="plain">
-              @for (row of org?.counts?.locations || []; track row.name) {
-                <li><span>{{ row.name }}</span><strong>{{ row.count }}</strong></li>
-              }
-            </ul>
-          </div>
+    </div>
+    @if (error) { <p class="form-error">{{ error }}</p> }
+
+    <div class="seg-tabs page-tabs" role="tablist" aria-label="Organisation sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'chart'" [class.is-on]="tab === 'chart'" (click)="setTab('chart')">
+        <i class="bi bi-diagram-2"></i> Chart
+        @if (org?.counts?.active) { <span class="chip">{{ org!.counts!.active }}</span> }
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'structure'" [class.is-on]="tab === 'structure'" (click)="setTab('structure')">
+        <i class="bi bi-ladder"></i> Structure
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'teams'" [class.is-on]="tab === 'teams'" (click)="setTab('teams')">
+        <i class="bi bi-people"></i> Teams
+        @if (org?.teams?.length) { <span class="chip">{{ org!.teams!.length }}</span> }
+      </button>
+    </div>
+
+    @if (tab === 'chart') {
+      @if (org?.chartLimited) { <p class="banner">This company has more people than the chart can draw at once. Use People search, teams, and the ladder.</p> }
+      @if (org?.counts) {
+        <div class="headcount">
+          <article class="card"><strong>{{ org?.counts?.active }}</strong><span>Active</span></article>
+          <article class="card"><strong>{{ org?.counts?.onboarding }}</strong><span>Onboarding</span></article>
+          <article class="card"><strong>{{ org?.counts?.exited }}</strong><span>Exited</span></article>
+          <article class="card"><strong>{{ org?.counts?.departments?.length }}</strong><span>Departments</span></article>
         </div>
-        <app-org-chart [people]="org?.chart || []" />
-      </section>
-    }
-    <section class="card">
-      <h2><i class="bi bi-ladder"></i> Ladder</h2>
-      <p class="muted">Higher on the list sits higher in the company. Team scope can approve only their own reports. Company scope, once the permission is turned on in Access, covers the company. A new role starts with no extra permissions.</p>
-      <ul class="plain">
-        @for (role of org?.roles || []; track role.id) {
-          <li><span>{{ role.name }}</span><strong>{{ role.scope === 'team' ? 'Own team' : 'Company' }}</strong></li>
-        }
-      </ul>
-      @if (canEdit) {
-        <form class="org-add" (ngSubmit)="addRole()">
-          <input name="roleName" [(ngModel)]="roleName" placeholder="Role, such as VP" aria-label="Role name">
-          <select name="roleScope" [(ngModel)]="roleScope" aria-label="Role scope">
-            <option value="company">Company</option>
-            <option value="team">Own team</option>
-          </select>
-          <button class="btn btn-secondary" type="submit">Add role</button>
-        </form>
+        <section class="card">
+          <h2><i class="bi bi-diagram-2"></i> Reporting line</h2>
+          <div class="split-stats">
+            <div>
+              <h3>By department</h3>
+              <ul class="plain">
+                @for (row of org?.counts?.departments || []; track row.name) {
+                  <li><span>{{ row.name }}</span><strong>{{ row.count }}</strong></li>
+                }
+              </ul>
+            </div>
+            <div>
+              <h3>By location</h3>
+              <ul class="plain">
+                @for (row of org?.counts?.locations || []; track row.name) {
+                  <li><span>{{ row.name }}</span><strong>{{ row.count }}</strong></li>
+                }
+              </ul>
+            </div>
+          </div>
+          <app-org-chart [people]="org?.chart || []" />
+        </section>
       }
-    </section>
-    <div class="org-grid">
+    }
+
+    @if (tab === 'structure') {
       <section class="card">
-        <h2><i class="bi bi-diagram-3"></i> Departments</h2>
-        <ul class="plain">@for (item of org?.departments || []; track item.id) { <li>{{ item.name }}</li> }</ul>
+        <h2><i class="bi bi-ladder"></i> Ladder</h2>
+        <p class="muted">Higher on the list sits higher in the company. Team scope can approve only their own reports. Company scope, once the permission is turned on in Access, covers the company. A new role starts with no extra permissions.</p>
+        <ul class="plain">
+          @for (role of org?.roles || []; track role.id) {
+            <li><span>{{ role.name }}</span><strong>{{ role.scope === 'team' ? 'Own team' : 'Company' }}</strong></li>
+          }
+        </ul>
         @if (canEdit) {
-          <form class="org-add" (ngSubmit)="add('departments', department)">
-            <label class="sr" for="department">Add a department</label>
-            <input id="department" name="department" [(ngModel)]="department" placeholder="New department">
-            <button class="btn btn-secondary" type="submit">Add</button>
+          <form class="org-add" (ngSubmit)="addRole()">
+            <input name="roleName" [(ngModel)]="roleName" placeholder="Role, such as VP" aria-label="Role name">
+            <select name="roleScope" [(ngModel)]="roleScope" aria-label="Role scope">
+              <option value="company">Company</option>
+              <option value="team">Own team</option>
+            </select>
+            <button class="btn btn-secondary" type="submit">Add role</button>
           </form>
         }
       </section>
-      <section class="card">
-        <h2><i class="bi bi-person-badge"></i> Designations</h2>
-        <ul class="plain">@for (item of org?.designations || []; track item.id) { <li>{{ item.name }}</li> }</ul>
-        @if (canEdit) {
-          <form class="org-add" (ngSubmit)="add('designations', designation)">
-            <label class="sr" for="designation">Add a designation</label>
-            <input id="designation" name="designation" [(ngModel)]="designation" placeholder="New designation">
-            <button class="btn btn-secondary" type="submit">Add</button>
-          </form>
-        }
-      </section>
-      <section class="card">
-        <h2><i class="bi bi-geo-alt"></i> Locations</h2>
-        <ul class="plain">@for (item of org?.locations || []; track item.id) { <li>{{ item.name }} <span class="muted">{{ item.city }} {{ item.state }}</span></li> }</ul>
-        @if (canEdit) {
-          <form class="org-add" (ngSubmit)="addLocation()">
-            <label class="sr" for="location">Add a location</label>
-            <input id="location" name="location" [(ngModel)]="location" placeholder="Name">
-            <input name="city" [(ngModel)]="city" placeholder="City" aria-label="City">
-            <button class="btn btn-secondary" type="submit">Add</button>
-          </form>
-        }
-      </section>
-      <section class="card">
-        <h2><i class="bi bi-bar-chart-steps"></i> Grades</h2>
-        <p class="muted">A grade is the band, from the junior grades up. Access for a grade is set on that person’s Access panel and applies to everyone on the grade.</p>
-        <ul class="plain">@for (item of org?.levels || []; track item.id) { <li><span>{{ item.name }}</span><strong>{{ item.rank }}</strong></li> }</ul>
-        @if (!org?.levels?.length) { <p class="muted">No grades yet.</p> }
-        @if (canEdit) {
-          <form class="org-add" (ngSubmit)="addLevel()">
-            <input name="levelName" [(ngModel)]="levelName" placeholder="Grade name" aria-label="Grade name">
-            <input name="levelRank" [(ngModel)]="levelRank" inputmode="numeric" placeholder="Rank" aria-label="Rank">
-            <button class="btn btn-secondary" type="submit">Add grade</button>
-          </form>
-        }
-      </section>
+      <div class="org-grid">
+        <section class="card">
+          <h2><i class="bi bi-diagram-3"></i> Departments</h2>
+          <ul class="plain">@for (item of org?.departments || []; track item.id) { <li>{{ item.name }}</li> }</ul>
+          @if (canEdit) {
+            <form class="org-add" (ngSubmit)="add('departments', department)">
+              <label class="sr" for="department">Add a department</label>
+              <input id="department" name="department" [(ngModel)]="department" placeholder="New department">
+              <button class="btn btn-secondary" type="submit">Add</button>
+            </form>
+          }
+        </section>
+        <section class="card">
+          <h2><i class="bi bi-person-badge"></i> Designations</h2>
+          <ul class="plain">@for (item of org?.designations || []; track item.id) { <li>{{ item.name }}</li> }</ul>
+          @if (canEdit) {
+            <form class="org-add" (ngSubmit)="add('designations', designation)">
+              <label class="sr" for="designation">Add a designation</label>
+              <input id="designation" name="designation" [(ngModel)]="designation" placeholder="New designation">
+              <button class="btn btn-secondary" type="submit">Add</button>
+            </form>
+          }
+        </section>
+        <section class="card">
+          <h2><i class="bi bi-geo-alt"></i> Locations</h2>
+          <ul class="plain">@for (item of org?.locations || []; track item.id) { <li>{{ item.name }} <span class="muted">{{ item.city }} {{ item.state }}</span></li> }</ul>
+          @if (canEdit) {
+            <form class="org-add" (ngSubmit)="addLocation()">
+              <label class="sr" for="location">Add a location</label>
+              <input id="location" name="location" [(ngModel)]="location" placeholder="Name">
+              <input name="city" [(ngModel)]="city" placeholder="City" aria-label="City">
+              <button class="btn btn-secondary" type="submit">Add</button>
+            </form>
+          }
+        </section>
+        <section class="card">
+          <h2><i class="bi bi-bar-chart-steps"></i> Grades</h2>
+          <p class="muted">A grade is the band, from the junior grades up. Access for a grade is set on that person's Access panel and applies to everyone on the grade.</p>
+          <ul class="plain">@for (item of org?.levels || []; track item.id) { <li><span>{{ item.name }}</span><strong>{{ item.rank }}</strong></li> }</ul>
+          @if (!org?.levels?.length) { <p class="muted">No grades yet.</p> }
+          @if (canEdit) {
+            <form class="org-add" (ngSubmit)="addLevel()">
+              <input name="levelName" [(ngModel)]="levelName" placeholder="Grade name" aria-label="Grade name">
+              <input name="levelRank" [(ngModel)]="levelRank" inputmode="numeric" placeholder="Rank" aria-label="Rank">
+              <button class="btn btn-secondary" type="submit">Add grade</button>
+            </form>
+          }
+        </section>
+      </div>
+    }
+
+    @if (tab === 'teams') {
       <section class="card">
         <h2><i class="bi bi-people"></i> Teams</h2>
         <p class="muted">A department can hold many teams, each with a team lead. Everyone sees their team lead on Reporting line. Privileges stay on the role, the department, and the grade, not on each team.</p>
@@ -137,12 +169,14 @@ import { OrgChartComponent } from '../shared/org-chart.component';
           </form>
         }
       </section>
-    </div>
+    }
   `,
 })
 export class OrganisationComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly tabKey = 'altamid.organisation.tab';
+  tab: OrgTab = 'chart';
   org: Org | null = null;
   department = '';
   designation = '';
@@ -160,8 +194,26 @@ export class OrganisationComponent implements OnInit {
     return !!this.store.me?.access?.includes('people.edit');
   }
 
+  get tabLede(): string {
+    const lines: Record<OrgTab, string> = {
+      chart: 'The reporting line, headcount, and org chart. Up to 400 people at a time.',
+      structure: 'Roles, departments, designations, locations, and grades that shape the company.',
+      teams: 'Teams inside departments, each with an optional team lead.',
+    };
+    return lines[this.tab];
+  }
+
+  setTab(tab: OrgTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
     this.city = this.store.me?.company.city || '';
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as OrgTab | null;
+      if (saved && ['chart', 'structure', 'teams'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await this.load();
   }
 

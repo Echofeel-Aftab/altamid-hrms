@@ -42,6 +42,8 @@ interface Opening {
   recent: ApplicationRow[];
 }
 
+type OpeningTab = 'details' | 'portals' | 'applications';
+
 const PORTALS: PortalChoice[] = [
   { id: 'naukri', label: 'Naukri' },
   { id: 'linkedin', label: 'LinkedIn' },
@@ -68,6 +70,24 @@ const PORTALS: PortalChoice[] = [
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
+
+    <div class="seg-tabs page-tabs" role="tablist" aria-label="Job sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'details'" [class.is-on]="tab === 'details'" (click)="setTab('details')">
+        <i class="bi bi-briefcase"></i> Details
+      </button>
+      @if (job) {
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'portals'" [class.is-on]="tab === 'portals'" (click)="setTab('portals')">
+          <i class="bi bi-globe2"></i> Portals
+          @if (chosen.size) { <span class="chip">{{ chosen.size }}</span> }
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'applications'" [class.is-on]="tab === 'applications'" (click)="setTab('applications')">
+          <i class="bi bi-people"></i> Applications
+          @if (job.applications) { <span class="chip">{{ job.applications }}</span> }
+        </button>
+      }
+    </div>
+
+    @if (tab === 'details') {
     <form class="card" (ngSubmit)="save(job?.status || 'draft')">
       <h2><i class="bi bi-briefcase"></i> The job</h2>
       <div class="split">
@@ -135,8 +155,9 @@ const PORTALS: PortalChoice[] = [
         }
       </div>
     </form>
+    }
 
-    @if (job) {
+    @if (tab === 'portals' && job) {
       <section class="card">
         <h2><i class="bi bi-globe2"></i> Where this job is posted</h2>
         <p class="muted">The company website takes applications whenever the job is open. Tick a portal to include the job on that portal's feed and to give you an apply address tagged for it.</p>
@@ -174,7 +195,9 @@ const PORTALS: PortalChoice[] = [
           }
         </div>
       </section>
+    }
 
+    @if (tab === 'applications' && job) {
       <section class="card">
         <h2><i class="bi bi-people"></i> Applications for this job</h2>
         @if (!job.recent.length) {
@@ -197,6 +220,8 @@ export class OpeningComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly store = inject(SessionStore);
+  private readonly tabKey = 'altamid.opening.tab';
+  tab: OpeningTab = 'details';
   readonly portals = PORTALS;
   job: Opening | null = null;
   title = '';
@@ -217,7 +242,16 @@ export class OpeningComponent implements OnInit {
   ok = '';
   busy = false;
 
+  setTab(tab: OpeningTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as OpeningTab | null;
+      if (saved && ['details', 'portals', 'applications'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     try {
       const desk = await this.api.get<{ hireViaAgencies: boolean; vendors: Array<{ id: string; name: string; hireThrough: boolean }> }>('/v1/vendors');
       this.agencies = desk.hireViaAgencies ? desk.vendors.filter((item) => item.hireThrough) : [];
@@ -228,6 +262,7 @@ export class OpeningComponent implements OnInit {
     if (!id || id === 'new') {
       this.department = this.store.me?.workplace?.department || '';
       this.location = this.store.me?.workplace?.location || this.store.me?.company.city || '';
+      if (this.tab !== 'details') this.setTab('details');
       return;
     }
     await this.load(id);

@@ -44,6 +44,8 @@ interface PlotDot extends GrowthPoint { x: number; y: number }
 interface PlotTick { n: number; y: number }
 interface Plot { w: number; h: number; left: number; right: number; points: string; dots: PlotDot[]; ticks: PlotTick[] }
 
+type GrowthTab = 'overview' | 'history' | 'publish';
+
 @Component({
   selector: 'app-growth',
   imports: [FormsModule, PhotoComponent],
@@ -53,12 +55,28 @@ interface Plot { w: number; h: number; left: number; right: number; points: stri
         <span class="page-mark" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></span>
         <p class="eyebrow">My day</p>
         <h1>My Growth</h1>
-        <p class="lede">The career line from the year you joined, and each appraisal your manager or HR has published. A year stays hidden until they publish the grade and the CTC breakup.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
     </div>
 
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (view) {
+      <div class="seg-tabs page-tabs" role="tablist" aria-label="Growth sections">
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'overview'" [class.is-on]="tab === 'overview'" (click)="setTab('overview')">
+          <i class="bi bi-graph-up-arrow"></i> Overview
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'history'" [class.is-on]="tab === 'history'" (click)="setTab('history')">
+          <i class="bi bi-table"></i> History
+          @if (view.history.length) { <span class="chip">{{ view.history.length }}</span> }
+        </button>
+        @if (view.canPublish) {
+          <button type="button" role="tab" [attr.aria-selected]="tab === 'publish'" [class.is-on]="tab === 'publish'" (click)="setTab('publish')">
+            <i class="bi bi-pencil-square"></i> Publish
+          </button>
+        }
+      </div>
+
+      @if (tab === 'overview') {
       @if (view.people.length > 1) {
         <section class="card growth-pick">
           <label for="growth-who">Whose growth</label>
@@ -141,7 +159,26 @@ interface Plot { w: number; h: number; left: number; right: number; points: stri
             <p class="muted">Add a date of joining, or publish an appraisal, and the chart will draw here.</p>
           }
         </section>
+      }
+      }
 
+      @if (tab === 'history') {
+        @if (view.people.length > 1) {
+          <section class="card growth-pick">
+            <label for="growth-who-hist">Whose growth</label>
+            <select id="growth-who-hist" name="personHist" [(ngModel)]="personId" (ngModelChange)="load()">
+              @for (item of view.people; track item.id) {
+                <option [value]="item.id">{{ item.mine ? 'My growth · ' : '' }}{{ item.name }} · {{ item.code }}</option>
+              }
+            </select>
+          </section>
+        }
+        @if (!view.person) {
+          <section class="card">
+            <h2><i class="bi bi-person"></i> Choose a person</h2>
+            <p class="muted">Pick someone above to see their career history.</p>
+          </section>
+        } @else {
         <section class="card">
           <h2><i class="bi bi-table"></i> Career history</h2>
           @if (!view.history.length) {
@@ -194,8 +231,16 @@ interface Plot { w: number; h: number; left: number; right: number; points: stri
             </div>
           }
         </section>
+        }
+      }
 
-        @if (view.canPublish) {
+      @if (tab === 'publish' && view.canPublish) {
+        @if (!view.person) {
+          <section class="card">
+            <h2><i class="bi bi-person"></i> Choose a person</h2>
+            <p class="muted">Pick someone on Overview before publishing an appraisal.</p>
+          </section>
+        } @else {
           <section class="card">
             <h2><i class="bi bi-pencil-square"></i> Publish this appraisal</h2>
             <p class="muted">Save a draft while you work on it. Publish when the grade and the CTC breakup should show on their My Growth. You can publish again later in the same year to correct it.</p>
@@ -253,6 +298,8 @@ interface Plot { w: number; h: number; left: number; right: number; points: stri
 export class GrowthComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly sweet = inject(Sweet);
+  private readonly tabKey = 'altamid.growth.tab';
+  tab: GrowthTab = 'overview';
   view: GrowthView | null = null;
   error = '';
   formNote = '';
@@ -267,7 +314,26 @@ export class GrowthComponent implements OnInit {
   openYear = 0;
   editingYear = 0;
 
+  get tabLede(): string {
+    const lines: Record<GrowthTab, string> = {
+      overview: 'The career line from the year you joined, and each appraisal your manager or HR has published.',
+      history: 'Every published year with grade, designation, and CTC. Expand a row to see the breakup.',
+      publish: 'Record or correct an appraisal. Save a draft while you work; publish when it should show on My Growth.',
+    };
+    return lines[this.tab];
+  }
+
+  setTab(tab: GrowthTab): void {
+    if (tab === 'publish' && !this.view?.canPublish) tab = 'overview';
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as GrowthTab | null;
+      if (saved && ['overview', 'history', 'publish'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await this.load();
   }
 
@@ -279,6 +345,7 @@ export class GrowthComponent implements OnInit {
       const switched = !!this.view && this.view.person?.id !== next.person?.id;
       this.view = next;
       if (!this.personId && next.person) this.personId = next.person.id;
+      if (this.tab === 'publish' && !next.canPublish) this.tab = 'overview';
       if (!this.editingYear || switched) this.freshForm();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load growth.';
@@ -327,6 +394,7 @@ export class GrowthComponent implements OnInit {
     this.lines = row.lines.length ? row.lines.map((line) => ({ side: line.side, name: line.name, rupees: line.rupees })) : [{ side: 'earning', name: 'Basic', rupees: '' }];
     this.formNote = '';
     this.openYear = row.year;
+    this.setTab('publish');
   }
 
   addLine(): void {

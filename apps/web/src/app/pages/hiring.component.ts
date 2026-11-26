@@ -32,6 +32,8 @@ interface PortalDesk {
   portals: PortalRow[];
 }
 
+type HiringTab = 'jobs' | 'portals';
+
 @Component({
   selector: 'app-hiring',
   imports: [RouterLink, FormsModule, DataTableComponent],
@@ -50,9 +52,23 @@ interface PortalDesk {
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
-    <app-data-table tableId="hiring-jobs" title="Openings" hint="Open a job and tick the portals it should appear on. Applications from those portals land with HR." empty="No jobs yet. Create one, then open it." [rows]="jobs" [columns]="columns" [loading]="loading" />
 
-    @if (desk) {
+    <div class="seg-tabs page-tabs" role="tablist" aria-label="Hiring sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'jobs'" [class.is-on]="tab === 'jobs'" (click)="setTab('jobs')">
+        <i class="bi bi-briefcase"></i> Jobs
+        @if (jobs.length) { <span class="chip">{{ jobs.length }}</span> }
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'portals'" [class.is-on]="tab === 'portals'" (click)="setTab('portals')">
+        <i class="bi bi-globe2"></i> Portals
+        @if (desk) { <span class="chip">{{ desk.portals.length }}</span> }
+      </button>
+    </div>
+
+    @if (tab === 'jobs') {
+      <app-data-table tableId="hiring-jobs" title="Openings" hint="Open a job and tick the portals it should appear on. Applications from those portals land with HR." empty="No jobs yet. Create one, then open it." [rows]="jobs" [columns]="columns" [loading]="loading" />
+    }
+
+    @if (tab === 'portals' && desk) {
       <section class="card portal-board">
         <h2><i class="bi bi-globe2"></i> Job portals</h2>
         <p class="muted">Altamid gives each open job an apply address and puts ticked jobs on a feed the portal can read. Paste the address into Naukri, LinkedIn, Indeed, and the others. When a candidate applies, or the portal calls the webhook, the application arrives in Hiring.</p>
@@ -85,12 +101,16 @@ interface PortalDesk {
           <button type="button" class="btn btn-ghost" (click)="rotate()" [disabled]="busy">Replace the feed address</button>
         </div>
       </section>
+    } @else if (tab === 'portals') {
+      <section class="card"><p class="muted">Portal settings could not be loaded.</p></section>
     }
   `,
 })
 export class HiringComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly sweet = inject(Sweet);
+  private readonly tabKey = 'altamid.hiring.tab';
+  tab: HiringTab = 'jobs';
   jobs: JobRow[] = [];
   desk: PortalDesk | null = null;
   error = '';
@@ -106,7 +126,16 @@ export class HiringComponent implements OnInit {
     { key: 'applications', label: 'Applications', text: (row) => String(row.applications), sub: (row) => row.fresh ? row.fresh + ' new' : '' },
   ];
 
+  setTab(tab: HiringTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as HiringTab | null;
+      if (saved && ['jobs', 'portals'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await this.load();
   }
 

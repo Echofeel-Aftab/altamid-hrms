@@ -2460,7 +2460,8 @@ html.theme-dark .seg-tabs { background: #121920; }
 html.theme-dark .seg-tabs button.is-on { background: #222d3a; color: var(--gold-400); }
 
 .att-head { margin-bottom: 12px; }
-.att-tabs { margin-bottom: 16px; }
+.att-tabs, .page-tabs { margin-bottom: 16px; }
+.page-tabs { width: fit-content; max-width: 100%; }
 .att-desk {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);

@@ -20,6 +20,9 @@ interface PayPack {
   forms: Array<{ id: string; year: string; published: boolean }>;
 }
 
+type PayrollTab = 'board' | 'design' | 'person';
+type PersonPayTab = 'ctc' | 'month' | 'form16';
+
 @Component({
   selector: 'app-payroll',
   imports: [FormsModule, PayrollMonthComponent],
@@ -29,7 +32,7 @@ interface PayPack {
         <span class="page-mark" aria-hidden="true"><i class="bi bi-cash-stack"></i></span>
         <p class="eyebrow">Payroll</p>
         <h1>Publish pay</h1>
-        <p class="lede">Design the salary by hand, then choose what the employee’s slip includes. Amounts are what you enter. PF, ESI, and tax are not calculated here.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
     </div>
     @if (!canOpen) {
@@ -37,8 +40,27 @@ interface PayPack {
     } @else {
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
-    <app-payroll-month (open)="openPerson($event)" (changed)="employeeId && loadPerson()" />
-    @if (layout) {
+
+    <div class="seg-tabs page-tabs" role="tablist" aria-label="Payroll sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'board'" [class.is-on]="tab === 'board'" (click)="setTab('board')">
+        <i class="bi bi-kanban"></i> Month board
+      </button>
+      @if (layout) {
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'design'" [class.is-on]="tab === 'design'" (click)="setTab('design')">
+          <i class="bi bi-receipt"></i> Slip design
+        </button>
+      }
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'person'" [class.is-on]="tab === 'person'" (click)="setTab('person')">
+        <i class="bi bi-person"></i> Person
+        @if (employeeId) { <span class="chip">{{ pack ? 'Loaded' : 'Picked' }}</span> }
+      </button>
+    </div>
+
+    @if (tab === 'board') {
+      <app-payroll-month (open)="openPerson($event)" (changed)="employeeId && loadPerson()" />
+    }
+
+    @if (tab === 'design' && layout) {
       <section class="card">
         <h2><i class="bi bi-receipt"></i> Slip design</h2>
         <p class="muted">These choices apply to every salary slip. A line you leave off one person’s month stays in the net and is hidden on their copy. PAN and the bank account, when included, show only the last four characters.</p>
@@ -52,6 +74,8 @@ interface PayPack {
         </div>
       </section>
     }
+
+    @if (tab === 'person') {
     <section class="card" id="pay-person-card">
       <label for="pay-find">Find a person</label>
       <div class="split">
@@ -66,6 +90,12 @@ interface PayPack {
       </select>
     </section>
     @if (pack) {
+      <div class="seg-mini mx-tabs" role="tablist" aria-label="Person payroll">
+        <button type="button" role="tab" [class.is-active]="personTab === 'ctc'" (click)="personTab = 'ctc'"><i class="bi bi-pie-chart"></i> CTC</button>
+        <button type="button" role="tab" [class.is-active]="personTab === 'month'" (click)="personTab = 'month'"><i class="bi bi-calendar-month"></i> Salary month</button>
+        <button type="button" role="tab" [class.is-active]="personTab === 'form16'" (click)="personTab = 'form16'"><i class="bi bi-file-earmark-text"></i> Form 16</button>
+      </div>
+      @if (personTab === 'ctc') {
       <section class="card">
         <h2><i class="bi bi-pie-chart"></i> CTC breakup</h2>
         <p class="muted">{{ pack.structure ? 'Annual CTC ' + pack.structure.annual : 'No CTC published yet.' }}</p>
@@ -108,6 +138,8 @@ interface PayPack {
           </div>
         </form>
       </section>
+      }
+      @if (personTab === 'month') {
       <section class="card">
         <h2><i class="bi bi-calendar-month"></i> Salary month</h2>
         @if (pack.slips.length) {
@@ -157,6 +189,8 @@ interface PayPack {
           </div>
         </form>
       </section>
+      }
+      @if (personTab === 'form16') {
       <section class="card">
         <h2><i class="bi bi-file-earmark-text"></i> Form 16</h2>
         @for (form of pack.forms; track form.id) {
@@ -182,6 +216,8 @@ interface PayPack {
           </div>
         </form>
       </section>
+      }
+    }
     }
     }
   `,
@@ -189,6 +225,9 @@ interface PayPack {
 export class PayrollComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly tabKey = 'altamid.payroll.tab';
+  tab: PayrollTab = 'board';
+  personTab: PersonPayTab = 'ctc';
   people: Person[] = [];
   finder = '';
   finderHint = '';
@@ -238,12 +277,32 @@ export class PayrollComponent implements OnInit {
     return !!this.store.me?.access?.includes('pay');
   }
 
+  get tabLede(): string {
+    const lines: Record<PayrollTab, string> = {
+      board: 'See who is published for each month and open someone to edit their pay.',
+      design: 'Choose what every salary slip shows. Amounts are what you enter. PF, ESI, and tax are not calculated here.',
+      person: 'Find an employee, set CTC, publish a salary month, and upload Form 16.',
+    };
+    return lines[this.tab];
+  }
+
+  setTab(tab: PayrollTab): void {
+    if (tab === 'design' && !this.layout) tab = 'board';
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
     if (!this.canOpen) return;
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as PayrollTab | null;
+      if (saved && ['board', 'design', 'person'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     try {
       await this.findPeople();
       this.layout = await this.api.get<SlipLayout>('/v1/pay/layout');
       this.ctcTemplates = (await this.api.get<{ templates: CtcTemplate[] }>('/v1/pay/ctc-templates').catch(() => ({ templates: [] }))).templates;
+      if (this.tab === 'design' && !this.layout) this.tab = 'board';
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load people.';
     }
@@ -255,8 +314,8 @@ export class PayrollComponent implements OnInit {
       if (one) this.people = [one, ...this.people];
     }
     this.employeeId = id;
+    this.setTab('person');
     await this.loadPerson();
-    setTimeout(() => document.getElementById('pay-person-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
 
   async fillDays(): Promise<void> {

@@ -11,6 +11,8 @@ interface PayView {
   forms: Array<{ id: string; year: string; published: boolean }>;
 }
 
+type PayTab = 'ctc' | 'months' | 'forms';
+
 @Component({
   selector: 'app-pay',
   template: `
@@ -19,7 +21,7 @@ interface PayView {
         <span class="page-mark" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
         <p class="eyebrow">My pay</p>
         <h1>Salary</h1>
-        <p class="lede">Your CTC, each published month, and Form 16. These are the figures payroll entered. This screen does not calculate PF, ESI, or tax.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
@@ -34,7 +36,21 @@ interface PayView {
           </ul>
         </section>
       } @else {
-        <div class="pay-desk">
+        <div class="seg-tabs page-tabs" role="tablist" aria-label="Salary sections">
+          <button type="button" role="tab" [attr.aria-selected]="tab === 'ctc'" [class.is-on]="tab === 'ctc'" (click)="setTab('ctc')">
+            <i class="bi bi-pie-chart"></i> CTC breakup
+          </button>
+          <button type="button" role="tab" [attr.aria-selected]="tab === 'months'" [class.is-on]="tab === 'months'" (click)="setTab('months')">
+            <i class="bi bi-calendar3"></i> Monthly breakup
+            @if (view.slips.length) { <span class="chip">{{ view.slips.length }}</span> }
+          </button>
+          <button type="button" role="tab" [attr.aria-selected]="tab === 'forms'" [class.is-on]="tab === 'forms'" (click)="setTab('forms')">
+            <i class="bi bi-file-earmark-text"></i> Form 16
+            @if (view.forms.length) { <span class="chip">{{ view.forms.length }}</span> }
+          </button>
+        </div>
+
+        @if (tab === 'ctc') {
           <section class="card">
             <h2><i class="bi bi-pie-chart"></i> CTC breakup</h2>
             @if (!view.structure) {
@@ -49,63 +65,67 @@ interface PayView {
               </ul>
             }
           </section>
-          <div class="pay-desk-main">
-            <section class="card">
-              <h2><i class="bi bi-calendar3"></i> Monthly breakup</h2>
-              @if (!view.slips.length) {
-                <p class="muted">No salary month has been published yet.</p>
-              } @else {
-                <div class="people-filters">
-                  @for (slip of view.slips; track slip.id) {
-                    <button type="button" class="btn" [class.btn-primary]="slip.id === selected" [class.btn-ghost]="slip.id !== selected" (click)="selected = slip.id">{{ slip.label }}</button>
-                  }
-                </div>
-                @if (openSlip) {
-                  <section class="slip">
-                    <header>
-                      <div>
-                        <strong>{{ openSlip.label }}</strong>
-                        <p>{{ view.person?.name }}</p>
-                      </div>
-                    </header>
-                    @if (openSlip.facts.length) {
-                      <dl class="slip-facts">
-                        @for (fact of openSlip.facts; track fact.label) {
-                          <div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
-                        }
-                      </dl>
-                    }
-                    @for (group of slipGroups(openSlip.lines); track group.side) {
-                      <p class="slip-kicker">{{ group.label }}</p>
-                      <table>
-                        <tbody>
-                          @for (line of group.lines; track line.name) {
-                            <tr><td>{{ line.name }}</td><td class="amount">{{ line.amount }}</td></tr>
-                          }
-                        </tbody>
-                      </table>
-                    }
-                    <table>
-                      <tbody><tr class="net"><td>Net pay</td><td class="amount">{{ openSlip.net }}</td></tr></tbody>
-                    </table>
-                    @if (openSlip.note) { <p class="muted">{{ openSlip.note }}</p> }
-                    <p class="muted">Net pay is the earnings minus the deductions payroll entered. A line left off this copy is still part of that net.</p>
-                  </section>
+        }
+
+        @if (tab === 'months') {
+          <section class="card">
+            <h2><i class="bi bi-calendar3"></i> Monthly breakup</h2>
+            @if (!view.slips.length) {
+              <p class="muted">No salary month has been published yet.</p>
+            } @else {
+              <div class="people-filters">
+                @for (slip of view.slips; track slip.id) {
+                  <button type="button" class="btn" [class.btn-primary]="slip.id === selected" [class.btn-ghost]="slip.id !== selected" (click)="selected = slip.id">{{ slip.label }}</button>
                 }
+              </div>
+              @if (openSlip) {
+                <section class="slip">
+                  <header>
+                    <div>
+                      <strong>{{ openSlip.label }}</strong>
+                      <p>{{ view.person?.name }}</p>
+                    </div>
+                  </header>
+                  @if (openSlip.facts.length) {
+                    <dl class="slip-facts">
+                      @for (fact of openSlip.facts; track fact.label) {
+                        <div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
+                      }
+                    </dl>
+                  }
+                  @for (group of slipGroups(openSlip.lines); track group.side) {
+                    <p class="slip-kicker">{{ group.label }}</p>
+                    <table>
+                      <tbody>
+                        @for (line of group.lines; track line.name) {
+                          <tr><td>{{ line.name }}</td><td class="amount">{{ line.amount }}</td></tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                  <table>
+                    <tbody><tr class="net"><td>Net pay</td><td class="amount">{{ openSlip.net }}</td></tr></tbody>
+                  </table>
+                  @if (openSlip.note) { <p class="muted">{{ openSlip.note }}</p> }
+                  <p class="muted">Net pay is the earnings minus the deductions payroll entered. A line left off this copy is still part of that net.</p>
+                </section>
               }
-            </section>
-            <section class="card">
-              <h2><i class="bi bi-file-earmark-text"></i> Form 16</h2>
-              @if (!view.forms.length) { <p class="muted">No Form 16 has been published yet.</p> }
-              @for (form of view.forms; track form.id) {
-                <div class="row-between">
-                  <strong>Financial year {{ form.year }}</strong>
-                  <button type="button" class="btn btn-ghost" (click)="openForm(form.id, form.year)"><i class="bi bi-eye"></i> Preview</button>
-                </div>
-              }
-            </section>
-          </div>
-        </div>
+            }
+          </section>
+        }
+
+        @if (tab === 'forms') {
+          <section class="card">
+            <h2><i class="bi bi-file-earmark-text"></i> Form 16</h2>
+            @if (!view.forms.length) { <p class="muted">No Form 16 has been published yet.</p> }
+            @for (form of view.forms; track form.id) {
+              <div class="row-between">
+                <strong>Financial year {{ form.year }}</strong>
+                <button type="button" class="btn btn-ghost" (click)="openForm(form.id, form.year)"><i class="bi bi-eye"></i> Preview</button>
+              </div>
+            }
+          </section>
+        }
       }
     }
   `,
@@ -113,9 +133,20 @@ interface PayView {
 export class PayComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly sweet = inject(Sweet);
+  private readonly tabKey = 'altamid.pay.tab';
+  tab: PayTab = 'ctc';
   view: PayView | null = null;
   selected = '';
   error = '';
+
+  get tabLede(): string {
+    const lines: Record<PayTab, string> = {
+      ctc: 'Your annual CTC breakup as payroll published it. This screen does not calculate PF, ESI, or tax.',
+      months: 'Each published salary month with earnings, deductions, and net pay.',
+      forms: 'Tax certificates (Form 16) for financial years payroll has published.',
+    };
+    return lines[this.tab];
+  }
 
   get openSlip() {
     return this.view?.slips.find((slip) => slip.id === this.selected) || null;
@@ -123,6 +154,11 @@ export class PayComponent implements OnInit {
 
   get allEmpty(): boolean {
     return !!this.view && !this.view.structure && !this.view.slips.length && !this.view.forms.length;
+  }
+
+  setTab(tab: PayTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
   }
 
   slipGroups(lines: PayLine[]): Array<{ side: string; label: string; lines: PayLine[] }> {
@@ -137,6 +173,10 @@ export class PayComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as PayTab | null;
+      if (saved && ['ctc', 'months', 'forms'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     try {
       this.view = await this.api.get<PayView>('/v1/pay');
       this.selected = this.view.slips[0]?.id || '';

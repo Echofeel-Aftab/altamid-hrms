@@ -5,13 +5,35 @@ import { Announcement, Org, when } from '../core/models';
 import { SessionStore } from '../core/session.store';
 import { RichEditorComponent, RichViewComponent } from '../shared/rich-editor.component';
 
+type NewsTab = 'feed' | 'post';
+
 @Component({
   selector: 'app-news',
   imports: [FormsModule, RichEditorComponent, RichViewComponent],
   template: `
-    <div class="page-head"><div><span class="page-mark" aria-hidden="true"><i class="bi bi-megaphone"></i></span><p class="eyebrow">Company</p><h1>Announcements</h1></div></div>
+    <div class="page-head">
+      <div>
+        <span class="page-mark" aria-hidden="true"><i class="bi bi-megaphone"></i></span>
+        <p class="eyebrow">Company</p>
+        <h1>Announcements</h1>
+        <p class="lede">{{ tabLede }}</p>
+      </div>
+    </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
-    @if (canPost) {
+
+    <div class="seg-tabs page-tabs" role="tablist" aria-label="Announcement sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'feed'" [class.is-on]="tab === 'feed'" (click)="setTab('feed')">
+        <i class="bi bi-collection"></i> Feed
+        @if (items.length) { <span class="chip">{{ items.length }}</span> }
+      </button>
+      @if (canPost) {
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'post'" [class.is-on]="tab === 'post'" (click)="setTab('post')">
+          <i class="bi bi-megaphone"></i> Post
+        </button>
+      }
+    </div>
+
+    @if (tab === 'post' && canPost) {
       <form class="card form-grid" (ngSubmit)="post()">
         <h2><i class="bi bi-megaphone"></i> Post an announcement</h2>
         <label for="title">Title</label>
@@ -48,21 +70,29 @@ import { RichEditorComponent, RichViewComponent } from '../shared/rich-editor.co
         <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Posting…' : 'Post' }}</button>
       </form>
     }
-    @for (item of items; track item.id) {
-      <article class="card feed-item">
-        <div class="row-between">
-          <h2>{{ item.title }}</h2>
-          @if (item.pinned) { <span class="pill gold">Pinned</span> }
-        </div>
-        <app-rich-view [value]="item.body" />
-        <small>{{ item.authorName }} · {{ posted(item.createdAt) }} · {{ item.audience }}</small>
-      </article>
+
+    @if (tab === 'feed') {
+      @if (!items.length) {
+        <section class="card"><p class="muted">No announcements yet.</p></section>
+      }
+      @for (item of items; track item.id) {
+        <article class="card feed-item">
+          <div class="row-between">
+            <h2>{{ item.title }}</h2>
+            @if (item.pinned) { <span class="pill gold">Pinned</span> }
+          </div>
+          <app-rich-view [value]="item.body" />
+          <small>{{ item.authorName }} · {{ posted(item.createdAt) }} · {{ item.audience }}</small>
+        </article>
+      }
     }
   `,
 })
 export class NewsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly tabKey = 'altamid.news.tab';
+  tab: NewsTab = 'feed';
   items: Announcement[] = [];
   org: Org | null = null;
   title = '';
@@ -79,7 +109,26 @@ export class NewsComponent implements OnInit {
     return !!this.store.me?.access?.includes('news');
   }
 
+  get tabLede(): string {
+    const lines: Record<NewsTab, string> = {
+      feed: 'Company announcements for you and your team.',
+      post: 'Write a new announcement and choose who can see it.',
+    };
+    return lines[this.tab];
+  }
+
+  setTab(tab: NewsTab): void {
+    if (tab === 'post' && !this.canPost) tab = 'feed';
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as NewsTab | null;
+      if (saved && ['feed', 'post'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
+    if (this.tab === 'post' && !this.canPost) this.tab = 'feed';
     await this.load();
     if (this.canPost) {
       this.org = await this.api.get<Org>('/v1/org');
@@ -105,6 +154,7 @@ export class NewsComponent implements OnInit {
       this.body = '';
       this.pinned = false;
       await this.load();
+      this.setTab('feed');
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not post.';
     } finally {

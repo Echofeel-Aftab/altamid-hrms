@@ -24,6 +24,8 @@ interface VendorDesk {
   vendors: Vendor[];
 }
 
+type VendorTab = 'list' | 'add';
+
 @Component({
   selector: 'app-vendors',
   imports: [FormsModule, RouterLink],
@@ -33,59 +35,85 @@ interface VendorDesk {
         <span class="page-mark" aria-hidden="true"><i class="bi bi-building"></i></span>
         <p class="eyebrow">Hiring</p>
         <h1>Vendors</h1>
-        <p class="lede">An agency can send you candidates, place outsourced people on your rolls, or take manpower you provide. Turn on the way this company works, then add each vendor with the options that apply.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
       <a class="btn btn-ghost" routerLink="/hiring">Jobs</a>
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
     @if (desk) {
-      <section class="card">
-        <h2><i class="bi bi-briefcase"></i> How this company uses agencies</h2>
-        <label class="check"><input type="checkbox" name="hire" [(ngModel)]="desk.hireViaAgencies"> We hire through agencies</label>
-        <label class="check"><input type="checkbox" name="supply" [(ngModel)]="desk.supplyManpower"> We provide manpower to other companies</label>
-        <div class="actions"><button type="button" class="btn btn-secondary" (click)="saveMode()" [disabled]="busy">Save</button></div>
-      </section>
-      <section class="card">
-        <h2>{{ editing ? 'Edit vendor' : 'Add a vendor' }}</h2>
-        <form class="form-grid" (ngSubmit)="save()">
-          <div class="split">
-            <div><label for="vendor-name">Name</label><input id="vendor-name" name="name" [(ngModel)]="name" required></div>
-            <div><label for="vendor-city">City</label><input id="vendor-city" name="city" [(ngModel)]="city"></div>
-          </div>
-          <div class="split">
-            <div><label for="vendor-contact">Contact</label><input id="vendor-contact" name="contact" [(ngModel)]="contactName"></div>
-            <div><label for="vendor-phone">Phone</label><input id="vendor-phone" name="phone" [(ngModel)]="phone"></div>
-          </div>
-          <label for="vendor-email">Email</label>
-          <input id="vendor-email" name="email" type="email" [(ngModel)]="email">
-          <p class="access-label">Options</p>
-          <label class="check"><input type="checkbox" name="hireThrough" [(ngModel)]="hireThrough"> We hire candidates through them</label>
-          <label class="check"><input type="checkbox" name="suppliesUs" [(ngModel)]="suppliesUs"> They supply outsourced people onto our rolls</label>
-          <label class="check"><input type="checkbox" name="weSupply" [(ngModel)]="weSupply"> We provide manpower to them</label>
-          <label for="vendor-note">Note</label>
-          <textarea id="vendor-note" name="note" rows="2" [(ngModel)]="note"></textarea>
-          <div class="actions">
-            <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : (editing ? 'Save vendor' : 'Add vendor') }}</button>
-            @if (editing) { <button type="button" class="btn btn-ghost" (click)="clear()">Cancel</button> }
-          </div>
-        </form>
-      </section>
-      @for (vendor of desk.vendors; track vendor.id) {
+      <div class="seg-tabs page-tabs" role="tablist" aria-label="Vendor sections">
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'list'" [class.is-on]="tab === 'list'" (click)="setTab('list')">
+          <i class="bi bi-list-ul"></i> Vendors
+          @if (desk.vendors.length) { <span class="chip">{{ desk.vendors.length }}</span> }
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'add'" [class.is-on]="tab === 'add'" (click)="setTab('add')">
+          <i class="bi bi-plus-lg"></i> {{ editing ? 'Edit vendor' : 'Add vendor' }}
+        </button>
+      </div>
+
+      @if (tab === 'list') {
         <section class="card">
-          <h2>{{ vendor.name }}</h2>
-          <p class="muted">{{ vendor.city || 'City not added' }}@if (vendor.contactName) { · {{ vendor.contactName }} }</p>
-          <p>{{ vendor.email || 'No email' }}@if (vendor.phone) { · {{ vendor.phone }} }</p>
-          <p>
-            @if (vendor.hireThrough) { <span class="pill">Hiring through them</span> }
-            @if (vendor.suppliesUs) { <span class="pill">Supplies our people</span> }
-            @if (vendor.weSupply) { <span class="pill">We staff them</span> }
-          </p>
-          @if (vendor.note) { <p>{{ vendor.note }}</p> }
-          <div class="actions">
-            <button type="button" class="btn btn-secondary" (click)="edit(vendor)">Edit</button>
-            <button type="button" class="btn btn-ghost" (click)="remove(vendor)">Remove</button>
-          </div>
+          <h2><i class="bi bi-briefcase"></i> How this company uses agencies</h2>
+          <label class="check"><input type="checkbox" name="hire" [(ngModel)]="desk.hireViaAgencies"> We hire through agencies</label>
+          <label class="check"><input type="checkbox" name="supply" [(ngModel)]="desk.supplyManpower"> We provide manpower to other companies</label>
+          <div class="actions"><button type="button" class="btn btn-secondary" (click)="saveMode()" [disabled]="busy">Save</button></div>
+        </section>
+        @if (desk.vendors.length) {
+          <section class="card">
+            <h2><i class="bi bi-building"></i> All vendors</h2>
+            @for (vendor of desk.vendors; track vendor.id) {
+              <article class="feed-item">
+                <div class="row-between">
+                  <h3>{{ vendor.name }}</h3>
+                  <span class="muted">{{ vendor.city || 'City not added' }}</span>
+                </div>
+                <p class="muted">@if (vendor.contactName) { {{ vendor.contactName }} · }{{ vendor.email || 'No email' }}@if (vendor.phone) { · {{ vendor.phone }} }</p>
+                <p>
+                  @if (vendor.hireThrough) { <span class="pill">Hiring through them</span> }
+                  @if (vendor.suppliesUs) { <span class="pill">Supplies our people</span> }
+                  @if (vendor.weSupply) { <span class="pill">We staff them</span> }
+                </p>
+                @if (vendor.note) { <p>{{ vendor.note }}</p> }
+                <div class="actions">
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="edit(vendor)">Edit</button>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="remove(vendor)">Remove</button>
+                </div>
+              </article>
+            }
+          </section>
+        } @else {
+          <section class="card">
+            <p class="muted">No vendors yet. Open <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('add')">Add vendor</button> to add one.</p>
+          </section>
+        }
+      }
+
+      @if (tab === 'add') {
+        <section class="card">
+          <h2>{{ editing ? 'Edit vendor' : 'Add a vendor' }}</h2>
+          <form class="form-grid" (ngSubmit)="save()">
+            <div class="split">
+              <div><label for="vendor-name">Name</label><input id="vendor-name" name="name" [(ngModel)]="name" required></div>
+              <div><label for="vendor-city">City</label><input id="vendor-city" name="city" [(ngModel)]="city"></div>
+            </div>
+            <div class="split">
+              <div><label for="vendor-contact">Contact</label><input id="vendor-contact" name="contact" [(ngModel)]="contactName"></div>
+              <div><label for="vendor-phone">Phone</label><input id="vendor-phone" name="phone" [(ngModel)]="phone"></div>
+            </div>
+            <label for="vendor-email">Email</label>
+            <input id="vendor-email" name="email" type="email" [(ngModel)]="email">
+            <p class="access-label">Options</p>
+            <label class="check"><input type="checkbox" name="hireThrough" [(ngModel)]="hireThrough"> We hire candidates through them</label>
+            <label class="check"><input type="checkbox" name="suppliesUs" [(ngModel)]="suppliesUs"> They supply outsourced people onto our rolls</label>
+            <label class="check"><input type="checkbox" name="weSupply" [(ngModel)]="weSupply"> We provide manpower to them</label>
+            <label for="vendor-note">Note</label>
+            <textarea id="vendor-note" name="note" rows="2" [(ngModel)]="note"></textarea>
+            <div class="actions">
+              <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : (editing ? 'Save vendor' : 'Add vendor') }}</button>
+              @if (editing) { <button type="button" class="btn btn-ghost" (click)="clear()">Cancel</button> }
+            </div>
+          </form>
         </section>
       }
     }
@@ -94,6 +122,8 @@ interface VendorDesk {
 export class VendorsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly tabKey = 'altamid.vendors.tab';
+  tab: VendorTab = 'list';
   desk: VendorDesk | null = null;
   name = '';
   city = '';
@@ -109,7 +139,24 @@ export class VendorsComponent implements OnInit {
   ok = '';
   busy = false;
 
+  get tabLede(): string {
+    const lines: Record<VendorTab, string> = {
+      list: 'An agency can send candidates, place outsourced people on your rolls, or take manpower you provide.',
+      add: 'Add or edit a vendor and mark which options apply.',
+    };
+    return lines[this.tab];
+  }
+
+  setTab(tab: VendorTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as VendorTab | null;
+      if (saved && ['list', 'add'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await this.load();
   }
 
@@ -126,6 +173,7 @@ export class VendorsComponent implements OnInit {
     this.weSupply = vendor.weSupply;
     this.ok = '';
     this.error = '';
+    this.setTab('add');
   }
 
   clear(): void {
@@ -140,6 +188,7 @@ export class VendorsComponent implements OnInit {
     this.suppliesUs = false;
     this.weSupply = false;
     this.city = this.store.me?.company.city || '';
+    this.setTab('list');
   }
 
   async saveMode(): Promise<void> {

@@ -17,6 +17,8 @@ interface RecognitionView {
 }
 interface PersonHit { id: string; name: string; code: string }
 
+type RecTab = 'give' | 'feed' | 'board';
+
 @Component({
   selector: 'app-recognition',
   imports: [FormsModule, PhotoComponent],
@@ -26,7 +28,7 @@ interface PersonHit { id: string; name: string; code: string }
         <span class="page-mark" aria-hidden="true"><i class="bi bi-award"></i></span>
         <p class="eyebrow">People</p>
         <h1>Recognition</h1>
-        <p class="lede">Give a colleague a badge for something they did. The feed and the board follow the period you pick.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
@@ -45,44 +47,61 @@ interface PersonHit { id: string; name: string; code: string }
           <div><strong>{{ view.feed.length }}</strong><small>In this period</small></div>
         </article>
       </div>
-      <section class="card">
-        <h2><i class="bi bi-award"></i> Give a badge</h2>
-        <form (ngSubmit)="give()">
-          <label for="who">Colleague</label>
-          <div class="rec-who">
-            <i class="bi bi-search" aria-hidden="true"></i>
-            <input id="who" name="who" [(ngModel)]="query" (ngModelChange)="look()" placeholder="Name or employee code" autocomplete="off">
-          </div>
-          @if (chosen) { <p class="rec-chosen"><app-photo size="xs" [personId]="chosen.id" [name]="chosen.name" /> Giving this to <strong>{{ chosen.name }}</strong> · {{ chosen.code }}</p> }
-          @if (hits.length) {
-            <div class="pick-list">
-              @for (person of hits; track person.id) {
-                <button type="button" (click)="choose(person)"><app-photo size="xs" [personId]="person.id" [name]="person.name" /> {{ person.name }} · {{ person.code }}</button>
+
+      <div class="seg-tabs page-tabs" role="tablist" aria-label="Recognition sections">
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'give'" [class.is-on]="tab === 'give'" (click)="setTab('give')">
+          <i class="bi bi-award"></i> Give a badge
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'feed'" [class.is-on]="tab === 'feed'" (click)="setTab('feed')">
+          <i class="bi bi-activity"></i> Live feed
+          @if (view.feed.length) { <span class="chip">{{ view.feed.length }}</span> }
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'board'" [class.is-on]="tab === 'board'" (click)="setTab('board')">
+          <i class="bi bi-trophy"></i> Board
+        </button>
+      </div>
+
+      @if (tab === 'give') {
+        <section class="card">
+          <h2><i class="bi bi-award"></i> Give a badge</h2>
+          <form (ngSubmit)="give()">
+            <label for="who">Colleague</label>
+            <div class="rec-who">
+              <i class="bi bi-search" aria-hidden="true"></i>
+              <input id="who" name="who" [(ngModel)]="query" (ngModelChange)="look()" placeholder="Name or employee code" autocomplete="off">
+            </div>
+            @if (chosen) { <p class="rec-chosen"><app-photo size="xs" [personId]="chosen.id" [name]="chosen.name" /> Giving this to <strong>{{ chosen.name }}</strong> · {{ chosen.code }}</p> }
+            @if (hits.length) {
+              <div class="pick-list">
+                @for (person of hits; track person.id) {
+                  <button type="button" (click)="choose(person)"><app-photo size="xs" [personId]="person.id" [name]="person.name" /> {{ person.name }} · {{ person.code }}</button>
+                }
+              </div>
+            }
+            <label>Badge</label>
+            <div class="rec-badges" role="radiogroup" aria-label="Badge">
+              @for (badge of view.badges; track badge.key) {
+                <button type="button" role="radio" [attr.aria-checked]="badgeKey === badge.key" [class]="'rec-badge tone-' + badgeOf(badge.key).tone + (badgeKey === badge.key ? ' is-on' : '')" (click)="badgeKey = badge.key">
+                  <span class="rec-medal"><i class="bi" [class]="badgeOf(badge.key).icon"></i></span>
+                  <strong>{{ badge.label }}</strong>
+                  <small>{{ badgeOf(badge.key).line }}</small>
+                </button>
               }
             </div>
-          }
-          <label>Badge</label>
-          <div class="rec-badges" role="radiogroup" aria-label="Badge">
-            @for (badge of view.badges; track badge.key) {
-              <button type="button" role="radio" [attr.aria-checked]="badgeKey === badge.key" [class]="'rec-badge tone-' + badgeOf(badge.key).tone + (badgeKey === badge.key ? ' is-on' : '')" (click)="badgeKey = badge.key">
-                <span class="rec-medal"><i class="bi" [class]="badgeOf(badge.key).icon"></i></span>
-                <strong>{{ badge.label }}</strong>
-                <small>{{ badgeOf(badge.key).line }}</small>
-              </button>
-            }
-          </div>
-          <label for="note">Note</label>
-          <input id="note" name="note" [(ngModel)]="note" maxlength="180" placeholder="One line on why">
-          <div class="actions rec-send">
-            <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi" [class]="badgeOf(badgeKey).icon"></i> Give a badge</button>
-            @if (sent) {
-              <span class="rec-sent" aria-live="polite"><i class="bi bi-check-circle-fill"></i> {{ sent }}</span>
-              <span class="rec-pop" aria-hidden="true">@for (n of pops; track n) { <i [attr.style]="'--a:' + n * 30 + 'deg'"></i> }</span>
-            }
-          </div>
-        </form>
-      </section>
-      <div class="page-split">
+            <label for="note">Note</label>
+            <input id="note" name="note" [(ngModel)]="note" maxlength="180" placeholder="One line on why">
+            <div class="actions rec-send">
+              <button class="btn btn-gold" type="submit" [disabled]="busy"><i class="bi" [class]="badgeOf(badgeKey).icon"></i> Give a badge</button>
+              @if (sent) {
+                <span class="rec-sent" aria-live="polite"><i class="bi bi-check-circle-fill"></i> {{ sent }}</span>
+                <span class="rec-pop" aria-hidden="true">@for (n of pops; track n) { <i [attr.style]="'--a:' + n * 30 + 'deg'"></i> }</span>
+              }
+            </div>
+          </form>
+        </section>
+      }
+
+      @if (tab === 'feed') {
         <section class="card">
           <div class="card-head">
             <h2><i class="bi bi-activity"></i> Live feed</h2>
@@ -112,7 +131,10 @@ interface PersonHit { id: string; name: string; code: string }
             </div>
           }
         </section>
-        <div class="dash-side">
+      }
+
+      @if (tab === 'board') {
+        <div class="page-split">
           <section class="card">
             <h2><i class="bi bi-trophy"></i> Leaderboard</h2>
             <div class="seg-mini rec-seg">
@@ -145,12 +167,14 @@ interface PersonHit { id: string; name: string; code: string }
             }
           </section>
         </div>
-      </div>
+      }
     }
   `,
 })
 export class RecognitionComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly tabKey = 'altamid.recognition.tab';
+  tab: RecTab = 'give';
   view: RecognitionView | null = null;
   error = '';
   query = '';
@@ -166,6 +190,15 @@ export class RecognitionComponent implements OnInit {
   private lookToken = 0;
   private sentTimer = 0;
 
+  get tabLede(): string {
+    const lines: Record<RecTab, string> = {
+      give: 'Give a colleague a badge for something they did well.',
+      feed: 'Recent badges in the period you pick.',
+      board: 'Leaderboard and wall of fame for the current period.',
+    };
+    return lines[this.tab];
+  }
+
   get shownBoard(): BoardRow[] {
     return this.side === 'givers' ? this.view?.givers || [] : this.view?.receivers || [];
   }
@@ -174,7 +207,16 @@ export class RecognitionComponent implements OnInit {
     return (this.view?.receivers || []).slice(0, 3);
   }
 
+  setTab(tab: RecTab): void {
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
   async ngOnInit(): Promise<void> {
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as RecTab | null;
+      if (saved && ['give', 'feed', 'board'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await this.load('month');
   }
 
