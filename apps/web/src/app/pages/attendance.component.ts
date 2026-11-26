@@ -39,198 +39,281 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 interface ReaderRow { id: string; name: string; kind: string; location: string; path: string; lastSeen: string }
 interface LiveRow { id: string; name: string; code: string; kind: string; at: string; reader: string }
 
+type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
+
 @Component({
   selector: 'app-attendance',
   imports: [FormsModule, DataTableComponent, LeaveTypePickComponent, PunchClockComponent, PhotoComponent],
   template: `
-    <div class="page-head">
+    <div class="page-head att-head">
       <div>
         <span class="page-mark" aria-hidden="true"><i class="bi bi-clock"></i></span>
         <p class="eyebrow">Time</p>
         <h1>Attendance</h1>
-        <p class="lede">Check in and out for today. On the month, click one day or several, then send the same regularization, work from home, extra time, or on duty for each of them.</p>
+        <p class="lede">{{ tabLede }}</p>
       </div>
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
-    @if (mine) {
-      <app-punch-clock [state]="mine" (changed)="punched($event)" />
-    }
-    @if (canConnect) {
-      <section class="card">
-        <h2><i class="bi bi-fingerprint"></i> Readers</h2>
-        <p class="muted">A fingerprint, face, or card reader matches the person, then posts the punch to the address below. Altamid does not store the finger, the face, or the card.</p>
-        <form class="reader-add" (ngSubmit)="addReader()">
-          <label class="sr" for="reader-name">Reader name</label>
-          <input id="reader-name" name="readerName" [(ngModel)]="readerName" placeholder="Gate reader" required>
-          <label class="sr" for="reader-kind">Kind</label>
-          <select id="reader-kind" name="readerKind" [(ngModel)]="readerKind">
-            <option value="fingerprint">Fingerprint</option>
-            <option value="face">Face</option>
-            <option value="card">Card</option>
-          </select>
-          <label class="sr" for="reader-place">Location</label>
-          <input id="reader-place" name="readerPlace" [(ngModel)]="readerPlace" placeholder="Location">
-          <button class="btn btn-secondary" type="submit" [disabled]="busy">Connect</button>
-        </form>
-        @if (!readers.length) { <p class="muted">No reader is connected yet.</p> }
-        @for (reader of readers; track reader.id) {
-          <article class="feed-item">
-            <div class="row-between">
-              <h3>{{ reader.name }}</h3>
-              <span class="pill">{{ reader.kind }}</span>
-            </div>
-            <p class="muted">{{ reader.location || 'No location' }} · {{ reader.lastSeen ? 'Last punch ' + reader.lastSeen : 'Waiting for the first punch' }}</p>
-            <label class="sr" [for]="'reader-url-' + reader.id">Post address</label>
-            <input [id]="'reader-url-' + reader.id" [value]="reader.path" readonly>
-            <p class="muted">Post JSON <span class="mono">{{ samplePunch }}</span></p>
-            <div class="actions"><button type="button" class="btn btn-ghost" (click)="removeReader(reader.id)">Remove</button></div>
-          </article>
-        }
-      </section>
-      <section class="card">
-        <h2><i class="bi bi-broadcast"></i> Live punches</h2>
-        @if (!live.length) { <p class="muted">No punches in the last few hours.</p> }
-        <ul class="plain">
-          @for (row of live; track row.id) {
-            <li><span class="li-person"><app-photo size="xs" [code]="row.code" [name]="row.name" /><span><strong>{{ row.name }}</strong> <span class="muted">{{ row.code }} · {{ row.reader }}</span></span></span><strong>{{ row.kind === 'in' ? 'In' : 'Out' }} · {{ row.at }}</strong></li>
-          }
-        </ul>
-      </section>
-    }
-    @if (calendar) {
-      <div class="page-split">
-      <section class="card">
-        <div class="cal-head card-head">
-          <button type="button" class="btn btn-ghost btn-sm" (click)="move(-1)" aria-label="Previous month">Previous</button>
-          <h2>{{ monthLabel }}</h2>
-          <button type="button" class="btn btn-ghost btn-sm" (click)="move(1)" aria-label="Next month">Next</button>
-        </div>
-        <p class="muted">Shift {{ calendar.shiftStart }}–{{ calendar.shiftEnd }}. Click a day to select it. Click another to add it. Click a chosen day to remove it.</p>
-        <div class="cal-grid" aria-label="Attendance calendar">
-          @for (name of dow; track name) { <div class="cal-dow">{{ name }}</div> }
-          @for (blank of blanks; track blank) { <div class="cal-day is-pad"></div> }
-          @for (day of calendar.days; track day.day) {
-            <button type="button" [class]="'cal-day is-' + day.status + (isPicked(day.day) ? ' is-selected' : '')" [attr.aria-pressed]="isPicked(day.day)" (click)="choose(day)">
-              <strong>{{ dateNumber(day.day) }}</strong>
-              <small>{{ day.label }}</small>
-            </button>
+
+    <div class="seg-tabs att-tabs" role="tablist" aria-label="Attendance sections">
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'today'" [class.is-on]="tab === 'today'" (click)="setTab('today')">
+        <i class="bi bi-sun"></i> Today
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'month'" [class.is-on]="tab === 'month'" (click)="setTab('month')">
+        <i class="bi bi-calendar3"></i> My month
+        @if (picked.length) { <span class="chip is-warn">{{ picked.length }}</span> }
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'team'" [class.is-on]="tab === 'team'" (click)="setTab('team')">
+        <i class="bi bi-people"></i> Who's in
+        @if (inNow) { <span class="chip">{{ inNow }}</span> }
+      </button>
+      <button type="button" role="tab" [attr.aria-selected]="tab === 'holidays'" [class.is-on]="tab === 'holidays'" (click)="setTab('holidays')">
+        <i class="bi bi-balloon"></i> Holidays
+        @if (calendar?.holidays?.length) { <span class="chip">{{ calendar!.holidays.length }}</span> }
+      </button>
+      @if (canConnect) {
+        <button type="button" role="tab" [attr.aria-selected]="tab === 'devices'" [class.is-on]="tab === 'devices'" (click)="setTab('devices')">
+          <i class="bi bi-fingerprint"></i> Devices
+          @if (readers.length) { <span class="chip">{{ readers.length }}</span> }
+        </button>
+      }
+    </div>
+
+    @if (tab === 'today') {
+      <div class="att-desk">
+        <div class="att-desk-main">
+          @if (mine) {
+            <app-punch-clock [state]="mine" (changed)="punched($event)" />
+          } @else {
+            <section class="card clock-card is-empty">
+              <strong>No punch clock yet</strong>
+              <p class="muted">Ask HR to link this sign-in to a person.</p>
+            </section>
           }
         </div>
-        <ul class="cal-legend">
-          <li><i class="is-present"></i> Present</li>
-          <li><i class="is-missed"></i> Missed check-out</li>
-          <li><i class="is-absent"></i> Absent</li>
-          <li><i class="is-leave"></i> Leave</li>
-          <li><i class="is-onduty"></i> On duty</li>
-          <li><i class="is-pending"></i> Waiting</li>
-          <li><i class="is-holiday"></i> Holiday</li>
-        </ul>
-      </section>
-      <section class="card day-panel">
-        @if (!picked.length) {
-          <h2><i class="bi bi-calendar-range"></i> Choose days</h2>
-          <p class="muted">Select one day or several. Past days can be regularized. Future days can be leave, work from home, or on duty.</p>
-        } @else {
-          <div class="card-head">
-            <h2>{{ selectionLabel }}</h2>
-            <button type="button" class="btn btn-ghost btn-sm" (click)="clearDays()">Clear</button>
-          </div>
-          <div class="day-picks">
-            @for (day of picked; track day) {
-              <button type="button" class="day-pick" (click)="drop(day)">{{ holidayWhen(day) }}</button>
-            }
-          </div>
-          @if (selected) {
-            @if (!selected.punches.length) { <p class="muted">No punches on {{ selected.day }}.</p> }
-            <ul class="plain-list">
-              @for (item of selected.punches; track item.at + item.kind) {
-                <li><strong>{{ item.kind === 'in' ? 'In' : 'Out' }}</strong> {{ item.at }} <span class="muted">{{ item.note }}</span></li>
-              }
-            </ul>
-            @if (selected.request) { <p>{{ requestLine }}</p> }
-          }
-          @if (store.me?.employeeId) {
-            <div class="actions">
-              <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'leave'">Apply leave</button>
-              @if (pastOnly) {
-                <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'regularization'">Regularize</button>
-                <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'extratime'">Extra time</button>
-              }
-              <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'wfh'">Work from home</button>
-              <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'onduty'">On duty</button>
+        <aside class="att-desk-side">
+          <section class="card att-snap">
+            <div class="card-head">
+              <h2><i class="bi bi-activity"></i> Right now</h2>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('team')">Open board</button>
             </div>
-            @if (!pastOnly) { <p class="muted">Regularization and extra time stay off while a future day is selected.</p> }
-          }
-          @if (panel === 'leave') {
-            <form class="day-form" (ngSubmit)="applyLeave()">
-              <label for="cal-type">Leave type</label>
-              <app-leave-type-pick controlId="cal-type" [types]="calendar.leaveTypes" [(value)]="leaveTypeId"></app-leave-type-pick>
-              @if (picked.length === 1) {
-                <label class="check" for="cal-half"><input id="cal-half" name="half" type="checkbox" [(ngModel)]="halfDay"> Half day</label>
-              }
-              <label for="cal-reason">Reason</label>
-              <textarea id="cal-reason" name="reason" rows="2" [(ngModel)]="leaveReason"></textarea>
-              <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Submit leave') }}</button></div>
-            </form>
-          }
-          @if (panel === 'regularization') {
-            <form class="day-form" (ngSubmit)="regularize()">
-              <div class="split">
-                <div><label for="reg-in">In</label><input id="reg-in" name="inTime" type="time" [(ngModel)]="inTime" required></div>
-                <div><label for="reg-out">Out</label><input id="reg-out" name="outTime" type="time" [(ngModel)]="outTime" required></div>
-              </div>
-              <label for="reg-reason">Reason</label>
-              <textarea id="reg-reason" name="regReason" rows="2" [(ngModel)]="regReason" required></textarea>
-              <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
-            </form>
-          }
-          @if (panel === 'wfh') {
-            <form class="day-form" (ngSubmit)="workFromHome()">
-              <div class="split">
-                <div><label for="wfh-in">In</label><input id="wfh-in" name="wfhIn" type="time" [(ngModel)]="inTime" required></div>
-                <div><label for="wfh-out">Out</label><input id="wfh-out" name="wfhOut" type="time" [(ngModel)]="outTime" required></div>
-              </div>
-              <label for="wfh-reason">Reason</label>
-              <textarea id="wfh-reason" name="wfhReason" rows="2" [(ngModel)]="wfhReason" required></textarea>
-              <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
-            </form>
-          }
-          @if (panel === 'extratime') {
-            <form class="day-form" (ngSubmit)="extraTime()">
-              <label for="extra-hours">Hours</label>
-              <input id="extra-hours" name="hours" type="number" min="0.5" max="12" step="0.5" [(ngModel)]="extraHours" required>
-              <label for="extra-reason">Reason</label>
-              <textarea id="extra-reason" name="extraReason" rows="2" [(ngModel)]="extraReason" required></textarea>
-              <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
-            </form>
-          }
-          @if (panel === 'onduty') {
-            <form class="day-form" (ngSubmit)="onDuty()">
-              <label for="duty-place">Where you will be</label>
-              <input id="duty-place" name="place" [(ngModel)]="place" required>
-              <label for="duty-reason">Reason</label>
-              <textarea id="duty-reason" name="dutyReason" rows="2" [(ngModel)]="dutyReason" required></textarea>
-              <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
-            </form>
-          }
-          @if (team.length) {
-            <div class="team-block">
-              <h3>Team on {{ selected?.day }}</h3>
-              <ul class="plain">
-                @for (person of team; track person.code) {
-                  <li><span class="li-person"><app-photo size="xs" [code]="person.code" [name]="person.name" /><span><strong>{{ person.name }}</strong><span class="muted"> · {{ person.code }} · {{ person.label || 'Scheduled' }}</span></span></span></li>
+            <div class="att-kpis">
+              <button type="button" class="att-kpi" (click)="setTab('team')">
+                <strong>{{ inNow }}</strong>
+                <span>Checked in</span>
+              </button>
+              <button type="button" class="att-kpi" (click)="setTab('team')">
+                <strong>{{ outNow }}</strong>
+                <span>Checked out</span>
+              </button>
+              <button type="button" class="att-kpi" (click)="setTab('month')">
+                <strong>{{ monthPresent }}</strong>
+                <span>Present · {{ monthShort }}</span>
+              </button>
+              <button type="button" class="att-kpi" (click)="setTab('month')">
+                <strong>{{ monthAbsent }}</strong>
+                <span>Absent · {{ monthShort }}</span>
+              </button>
+            </div>
+            <div class="att-quick">
+              <button type="button" class="btn btn-primary btn-sm" (click)="jumpMonth('leave')"><i class="bi bi-calendar-plus"></i> Apply leave</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="jumpMonth('regularization')"><i class="bi bi-arrow-repeat"></i> Regularize</button>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('month')"><i class="bi bi-calendar3"></i> Open calendar</button>
+            </div>
+          </section>
+
+          <section class="card att-live-card">
+            <div class="card-head">
+              <h2><i class="bi bi-broadcast"></i> Latest punches</h2>
+              @if (canConnect) { <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('devices')">Devices</button> }
+            </div>
+            @if (!livePreview.length) {
+              <p class="muted">No recent punches to show.</p>
+            } @else {
+              <ul class="att-live">
+                @for (row of livePreview; track row.id) {
+                  <li>
+                    <span class="li-person">
+                      <app-photo size="xs" [code]="row.code" [name]="row.name" />
+                      <span><strong>{{ row.name }}</strong><small class="muted">{{ row.code }}{{ row.reader ? ' · ' + row.reader : '' }}</small></span>
+                    </span>
+                    <strong class="att-live-when">{{ row.kind === 'in' ? 'In' : 'Out' }} · {{ row.at }}</strong>
+                  </li>
                 }
               </ul>
-            </div>
-          }
-        }
-      </section>
-      </div>
+            }
+          </section>
 
-      <section class="card">
-        <h2>Company holidays · {{ calendar.year }}</h2>
-        <p class="muted">Every holiday in the year. A holiday also appears on its month in the calendar, and it is not counted as leave.</p>
+          <section class="card att-preview">
+            <div class="card-head">
+              <h2><i class="bi bi-people"></i> Who's in</h2>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="setTab('team')">See all</button>
+            </div>
+            @if (loadingBoard) { <p class="muted">Loading…</p> }
+            @else if (!boardPreview.length) { <p class="muted">No one has punched yet today.</p> }
+            @else {
+              <ul class="att-live">
+                @for (row of boardPreview; track row.code) {
+                  <li>
+                    <span class="li-person">
+                      <app-photo size="xs" [code]="row.code" [name]="row.name" />
+                      <span><strong>{{ row.name }}</strong><small class="muted">{{ row.code }}</small></span>
+                    </span>
+                    <span class="pill" [class.is-ok]="row.state === 'in'">{{ row.state === 'in' ? 'In' : 'Out' }}</span>
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        </aside>
+      </div>
+    }
+
+    @if (tab === 'month' && calendar) {
+      <div class="page-split att-month-split">
+        <section class="card">
+          <div class="cal-head card-head">
+            <button type="button" class="btn btn-ghost btn-sm" (click)="move(-1)" aria-label="Previous month"><i class="bi bi-chevron-left"></i></button>
+            <h2>{{ monthLabel }}</h2>
+            <button type="button" class="btn btn-ghost btn-sm" (click)="move(1)" aria-label="Next month"><i class="bi bi-chevron-right"></i></button>
+          </div>
+          <p class="muted">Shift {{ calendar.shiftStart }}–{{ calendar.shiftEnd }}. Select one day or several, then use the actions on the right.</p>
+          <div class="cal-grid" aria-label="Attendance calendar">
+            @for (name of dow; track name) { <div class="cal-dow">{{ name }}</div> }
+            @for (blank of blanks; track blank) { <div class="cal-day is-pad"></div> }
+            @for (day of calendar.days; track day.day) {
+              <button type="button" [class]="'cal-day is-' + day.status + (isPicked(day.day) ? ' is-selected' : '')" [attr.aria-pressed]="isPicked(day.day)" (click)="choose(day)">
+                <strong>{{ dateNumber(day.day) }}</strong>
+                <small>{{ day.label }}</small>
+              </button>
+            }
+          </div>
+          <ul class="cal-legend">
+            <li><i class="is-present"></i> Present</li>
+            <li><i class="is-missed"></i> Missed</li>
+            <li><i class="is-absent"></i> Absent</li>
+            <li><i class="is-leave"></i> Leave</li>
+            <li><i class="is-onduty"></i> On duty</li>
+            <li><i class="is-pending"></i> Waiting</li>
+            <li><i class="is-holiday"></i> Holiday</li>
+          </ul>
+        </section>
+        <section class="card day-panel">
+          @if (!picked.length) {
+            <h2><i class="bi bi-calendar-range"></i> Choose days</h2>
+            <p class="muted">Past days can be regularized. Future days can be leave, work from home, or on duty.</p>
+            @if (todayDay) {
+              <button type="button" class="btn btn-secondary btn-sm" (click)="choose(todayDay)">Select today</button>
+            }
+          } @else {
+            <div class="card-head">
+              <h2>{{ selectionLabel }}</h2>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="clearDays()">Clear</button>
+            </div>
+            <div class="day-picks">
+              @for (day of picked; track day) {
+                <button type="button" class="day-pick" (click)="drop(day)">{{ holidayWhen(day) }}</button>
+              }
+            </div>
+            @if (selected) {
+              @if (!selected.punches.length) { <p class="muted">No punches on {{ selected.day }}.</p> }
+              <ul class="plain-list">
+                @for (item of selected.punches; track item.at + item.kind) {
+                  <li><strong>{{ item.kind === 'in' ? 'In' : 'Out' }}</strong> {{ item.at }} <span class="muted">{{ item.note }}</span></li>
+                }
+              </ul>
+              @if (selected.request) { <p>{{ requestLine }}</p> }
+            }
+            @if (store.me?.employeeId) {
+              <div class="actions">
+                <button type="button" class="btn btn-primary btn-sm" (click)="panel = 'leave'">Apply leave</button>
+                @if (pastOnly) {
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="panel = 'regularization'">Regularize</button>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'extratime'">Extra time</button>
+                }
+                <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'wfh'">Work from home</button>
+                <button type="button" class="btn btn-ghost btn-sm" (click)="panel = 'onduty'">On duty</button>
+              </div>
+              @if (!pastOnly) { <p class="muted">Regularization and extra time stay off while a future day is selected.</p> }
+            }
+            @if (panel === 'leave') {
+              <form class="day-form" (ngSubmit)="applyLeave()">
+                <label for="cal-type">Leave type</label>
+                <app-leave-type-pick controlId="cal-type" [types]="calendar.leaveTypes" [(value)]="leaveTypeId"></app-leave-type-pick>
+                @if (picked.length === 1) {
+                  <label class="check" for="cal-half"><input id="cal-half" name="half" type="checkbox" [(ngModel)]="halfDay"> Half day</label>
+                }
+                <label for="cal-reason">Reason</label>
+                <textarea id="cal-reason" name="reason" rows="2" [(ngModel)]="leaveReason"></textarea>
+                <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Submit leave') }}</button></div>
+              </form>
+            }
+            @if (panel === 'regularization') {
+              <form class="day-form" (ngSubmit)="regularize()">
+                <div class="split">
+                  <div><label for="reg-in">In</label><input id="reg-in" name="inTime" type="time" [(ngModel)]="inTime" required></div>
+                  <div><label for="reg-out">Out</label><input id="reg-out" name="outTime" type="time" [(ngModel)]="outTime" required></div>
+                </div>
+                <label for="reg-reason">Reason</label>
+                <textarea id="reg-reason" name="regReason" rows="2" [(ngModel)]="regReason" required></textarea>
+                <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
+              </form>
+            }
+            @if (panel === 'wfh') {
+              <form class="day-form" (ngSubmit)="workFromHome()">
+                <div class="split">
+                  <div><label for="wfh-in">In</label><input id="wfh-in" name="wfhIn" type="time" [(ngModel)]="inTime" required></div>
+                  <div><label for="wfh-out">Out</label><input id="wfh-out" name="wfhOut" type="time" [(ngModel)]="outTime" required></div>
+                </div>
+                <label for="wfh-reason">Reason</label>
+                <textarea id="wfh-reason" name="wfhReason" rows="2" [(ngModel)]="wfhReason" required></textarea>
+                <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
+              </form>
+            }
+            @if (panel === 'extratime') {
+              <form class="day-form" (ngSubmit)="extraTime()">
+                <label for="extra-hours">Hours</label>
+                <input id="extra-hours" name="hours" type="number" min="0.5" max="12" step="0.5" [(ngModel)]="extraHours" required>
+                <label for="extra-reason">Reason</label>
+                <textarea id="extra-reason" name="extraReason" rows="2" [(ngModel)]="extraReason" required></textarea>
+                <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
+              </form>
+            }
+            @if (panel === 'onduty') {
+              <form class="day-form" (ngSubmit)="onDuty()">
+                <label for="duty-place">Where you will be</label>
+                <input id="duty-place" name="place" [(ngModel)]="place" required>
+                <label for="duty-reason">Reason</label>
+                <textarea id="duty-reason" name="dutyReason" rows="2" [(ngModel)]="dutyReason" required></textarea>
+                <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy">{{ submitLabel('Send for approval') }}</button></div>
+              </form>
+            }
+            @if (team.length) {
+              <div class="team-block">
+                <h3>Team on {{ selected?.day }}</h3>
+                <ul class="plain">
+                  @for (person of team; track person.code) {
+                    <li><span class="li-person"><app-photo size="xs" [code]="person.code" [name]="person.name" /><span><strong>{{ person.name }}</strong><span class="muted"> · {{ person.code }} · {{ person.label || 'Scheduled' }}</span></span></span></li>
+                  }
+                </ul>
+              </div>
+            }
+          }
+        </section>
+      </div>
+    }
+
+    @if (tab === 'team') {
+      <app-data-table tableId="who-is-in" title="Who is in" empty="No one has punched yet today." [rows]="board" [columns]="boardColumns" [loading]="loadingBoard" />
+    }
+
+    @if (tab === 'holidays' && calendar) {
+      <section class="card att-holidays">
+        <div class="card-head">
+          <h2><i class="bi bi-balloon"></i> Company holidays · {{ calendar.year }}</h2>
+        </div>
+        <p class="muted">Holidays also appear on the month calendar and are not counted as leave.</p>
         @if (calendar.canEditHolidays) {
           <form class="inline-add" (ngSubmit)="addHoliday()">
             <div><label for="hol-day">Date</label><input id="hol-day" name="holidayDay" type="date" [(ngModel)]="holidayDay" required></div>
@@ -256,13 +339,60 @@ interface LiveRow { id: string; name: string; code: string; kind: string; at: st
         </div>
       </section>
     }
-    <app-data-table tableId="who-is-in" title="Who is in" empty="No one has punched yet today." [rows]="board" [columns]="boardColumns" [loading]="loadingBoard" />
+
+    @if (tab === 'devices' && canConnect) {
+      <div class="att-devices">
+        <section class="card">
+          <h2><i class="bi bi-fingerprint"></i> Readers</h2>
+          <p class="muted">A fingerprint, face, or card reader matches the person, then posts the punch to the address below. Altamid does not store the finger, the face, or the card.</p>
+          <form class="reader-add" (ngSubmit)="addReader()">
+            <label class="sr" for="reader-name">Reader name</label>
+            <input id="reader-name" name="readerName" [(ngModel)]="readerName" placeholder="Gate reader" required>
+            <label class="sr" for="reader-kind">Kind</label>
+            <select id="reader-kind" name="readerKind" [(ngModel)]="readerKind">
+              <option value="fingerprint">Fingerprint</option>
+              <option value="face">Face</option>
+              <option value="card">Card</option>
+            </select>
+            <label class="sr" for="reader-place">Location</label>
+            <input id="reader-place" name="readerPlace" [(ngModel)]="readerPlace" placeholder="Location">
+            <button class="btn btn-secondary" type="submit" [disabled]="busy">Connect</button>
+          </form>
+          @if (!readers.length) { <p class="muted">No reader is connected yet.</p> }
+          <div class="att-reader-grid">
+            @for (reader of readers; track reader.id) {
+              <article class="feed-item">
+                <div class="row-between">
+                  <h3>{{ reader.name }}</h3>
+                  <span class="pill">{{ reader.kind }}</span>
+                </div>
+                <p class="muted">{{ reader.location || 'No location' }} · {{ reader.lastSeen ? 'Last punch ' + reader.lastSeen : 'Waiting for the first punch' }}</p>
+                <label class="sr" [for]="'reader-url-' + reader.id">Post address</label>
+                <input [id]="'reader-url-' + reader.id" [value]="reader.path" readonly>
+                <p class="muted">Post JSON <span class="mono">{{ samplePunch }}</span></p>
+                <div class="actions"><button type="button" class="btn btn-ghost" (click)="removeReader(reader.id)">Remove</button></div>
+              </article>
+            }
+          </div>
+        </section>
+        <section class="card">
+          <h2><i class="bi bi-broadcast"></i> Live punches</h2>
+          @if (!live.length) { <p class="muted">No punches in the last few hours.</p> }
+          <ul class="plain att-live">
+            @for (row of live; track row.id) {
+              <li><span class="li-person"><app-photo size="xs" [code]="row.code" [name]="row.name" /><span><strong>{{ row.name }}</strong> <span class="muted">{{ row.code }} · {{ row.reader }}</span></span></span><strong>{{ row.kind === 'in' ? 'In' : 'Out' }} · {{ row.at }}</strong></li>
+            }
+          </ul>
+        </section>
+      </div>
+    }
   `,
 })
 export class AttendanceComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly store = inject(SessionStore);
   readonly dow = DOW;
+  tab: DeskTab = 'today';
   mine: PunchState | null = null;
   board: BoardRow[] = [];
   loadingBoard = true;
@@ -296,6 +426,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   readerPlace = '';
   readonly samplePunch = '{ "code": "EMP005", "kind": "in" }';
   private liveTimer = 0;
+  private readonly tabKey = 'altamid.attendance.tab';
   readonly boardColumns: DataColumn<BoardRow>[] = [
     { key: 'name', label: 'Person', text: (row) => row.name, person: (row) => ({ code: row.code, name: row.name }) },
     { key: 'code', label: 'Code', text: (row) => row.code },
@@ -331,15 +462,85 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   }
 
+  get monthShort(): string {
+    if (!this.calendar) return '';
+    const [year, month] = this.calendar.month.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-IN', { month: 'short', timeZone: 'UTC' });
+  }
+
   get canConnect(): boolean {
     return !!this.store.me?.access?.includes('attendance.devices') || !!this.store.me?.access?.includes('attendance');
+  }
+
+  get tabLede(): string {
+    const lines: Record<DeskTab, string> = {
+      today: 'Check in, see who is around, and jump into leave or regularization without scrolling the whole desk.',
+      month: 'Select one day or several, then apply leave, regularize, work from home, extra time, or on duty.',
+      team: 'Everyone who has punched today, with their last punch and where they checked in.',
+      holidays: 'Company holidays for the year. They show on the calendar and are not counted as leave.',
+      devices: 'Connect fingerprint, face, or card readers and watch live punches as they arrive.',
+    };
+    return lines[this.tab];
+  }
+
+  get inNow(): number {
+    return this.board.filter((row) => row.state === 'in').length;
+  }
+
+  get outNow(): number {
+    return this.board.filter((row) => row.state === 'out').length;
+  }
+
+  get monthPresent(): number {
+    return (this.calendar?.days || []).filter((day) => day.status === 'present').length;
+  }
+
+  get monthAbsent(): number {
+    return (this.calendar?.days || []).filter((day) => day.status === 'absent' || day.status === 'missed').length;
+  }
+
+  get todayDay(): CalDay | null {
+    return this.calendar?.days.find((day) => day.day === this.calendar?.today) || null;
+  }
+
+  get boardPreview(): BoardRow[] {
+    return this.board.slice(0, 6);
+  }
+
+  get livePreview(): LiveRow[] {
+    if (this.live.length) return this.live.slice(0, 6);
+    return this.board.slice(0, 6).map((row, index) => ({
+      id: 'board-' + row.code + index,
+      name: row.name,
+      code: row.code,
+      kind: row.state === 'in' ? 'in' : 'out',
+      at: clock(row.at),
+      reader: row.where || '',
+    }));
+  }
+
+  setTab(tab: DeskTab): void {
+    if (tab === 'devices' && !this.canConnect) tab = 'today';
+    this.tab = tab;
+    try { sessionStorage.setItem(this.tabKey, tab); } catch { /* ignore */ }
+  }
+
+  jumpMonth(action: string): void {
+    this.setTab('month');
+    if (this.todayDay && !this.picked.length) void this.choose(this.todayDay);
+    this.panel = action;
   }
 
   async ngOnInit(): Promise<void> {
     this.month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
     this.place = this.store.me?.workplace?.location || this.store.me?.company.city || '';
     this.readerPlace = this.store.me?.company.city || '';
+    try {
+      const saved = sessionStorage.getItem(this.tabKey) as DeskTab | null;
+      if (saved && ['today', 'month', 'team', 'holidays', 'devices'].includes(saved)) this.tab = saved;
+    } catch { /* ignore */ }
     await Promise.all([this.loadPunch(), this.loadCalendar(), this.loadReaders()]);
+    if (this.tab === 'devices' && !this.canConnect) this.tab = 'today';
     if (this.canConnect) this.liveTimer = window.setInterval(() => void this.loadLive(), 8000);
   }
 
