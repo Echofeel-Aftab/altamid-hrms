@@ -124,6 +124,7 @@ export function derive(primary: string, accent: string): Record<string, string> 
 const LEGACY_SURFACES: Record<string, string> = {
   bg: '#f3f6fa', text: '#101828', muted: '#2f4054', border: '#c5d0dc',
   dark_bg: '#12171d', dark_card: '#1b222b', dark_text: '#eef3f8', dark_muted: '#c5d0da', dark_border: '#2a3440',
+  /* Pre–Phase A defaults also treated as unset so tenants pick up the quiet palette. */
 };
 
 export function applyBrand(colors: Record<string, string> | undefined): void {
@@ -149,11 +150,16 @@ export function applyBrand(colors: Record<string, string> | undefined): void {
       --navy-950: ${navy950}; --navy-900: ${navy900}; --navy-800: ${primary}; --navy-700: ${x('primary_hover')}; --navy-600: ${navy600};
       --gold-700: ${gold700}; --gold-600: ${gold600}; --gold-500: ${accent}; --gold-400: ${x('accent_hover')}; --gold-300: ${gold300};
       --bg: ${x('bg')}; --card: ${x('card')}; --text: ${x('text')}; --muted: ${x('muted')}; --border: ${x('border')}; --heading: ${x('heading')};
-      --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px ${hexAlpha(primary, 0.07)};
+      --border-strong: ${mix(x('border'), x('muted'), 0.35)};
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+      --shadow-lg: 0 6px 16px -8px ${hexAlpha(primary, 0.2)};
     }
     html.theme-dark {
       --bg: ${x('dark_bg')}; --card: ${x('dark_card')}; --text: ${x('dark_text')}; --muted: ${x('dark_muted')}; --border: ${x('dark_border')}; --heading: ${x('dark_heading')};
+      --border-strong: ${lighten(x('dark_border'), 0.12)};
       --gold-400: ${x('dark_accent')}; --gold-500: ${x('dark_btn_accent')}; --gold-600: ${darken(x('dark_btn_accent'), 0.1)};
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 10px 28px -12px rgba(0, 0, 0, 0.55);
     }
     .sidebar {
       --sb-bg: linear-gradient(180deg, ${lighten(x('sidebar_bg'), 0.45)} 0%, ${x('sidebar_bg')} 100%);
