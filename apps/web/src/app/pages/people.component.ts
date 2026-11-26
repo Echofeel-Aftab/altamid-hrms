@@ -15,7 +15,7 @@ import { DataColumn, DataTableComponent } from '../shared/data-table.component';
       @if (canEdit) { <div class="actions"><a class="btn btn-ghost" routerLink="/people/import"><i class="bi bi-file-earmark-arrow-up"></i> Import</a><a class="btn btn-primary" routerLink="/people/new"><i class="bi bi-person-plus"></i> Add a person</a></div> }
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
-    <app-data-table tableId="people" empty="No one matches that filter." [rows]="people" [columns]="columns">
+    <app-data-table tableId="people" empty="No one matches that filter." [rows]="people" [columns]="columns" [loading]="loading">
       <div tableFilter class="people-filters">
         <label class="sr" for="people-q">Search</label>
         <input id="people-q" [(ngModel)]="query" placeholder="Name, code, or department" (keyup.enter)="load()">
@@ -45,6 +45,7 @@ export class PeopleComponent implements OnInit {
   query = '';
   status = '';
   error = '';
+  loading = true;
 
   readonly columns: DataColumn<Person>[] = [
     { key: 'name', label: 'Person', text: (row) => row.name, sub: (row) => row.workerType, link: (row) => '/people/' + row.id, person: (row) => ({ id: row.id, name: row.name }) },
@@ -74,6 +75,8 @@ export class PeopleComponent implements OnInit {
   }
 
   async load(): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       const params = new URLSearchParams();
       if (this.query.trim()) params.set('q', this.query.trim());
@@ -85,6 +88,8 @@ export class PeopleComponent implements OnInit {
       this.departments = data.departments;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load people.';
+    } finally {
+      this.loading = false;
     }
   }
 }

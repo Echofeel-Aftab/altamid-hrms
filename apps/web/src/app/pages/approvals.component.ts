@@ -72,7 +72,8 @@ interface ApprovalsBoard {
       [hint]="tab === 'waiting' ? 'Approve or reject from the Actions column. Pay detail changes may need a short reject reason.' : 'Decided leave, attendance, resignations, and pay detail changes you can see.'"
       [empty]="tab === 'waiting' ? 'Nothing is waiting right now.' : 'No decided requests yet.'"
       [rows]="visible"
-      [columns]="columns">
+      [columns]="columns"
+      [loading]="loading">
       <div tableFilter class="people-filters approvals-filters">
         <label class="sr" for="appr-kind">Type</label>
         <select id="appr-kind" [(ngModel)]="kind" (ngModelChange)="applyFilter()">
@@ -145,6 +146,7 @@ export class ApprovalsComponent implements OnInit {
   tab: BoardTab = 'waiting';
   kind: ApprovalKind = '';
   error = '';
+  loading = true;
   ok = '';
   busy = false;
   notes: Record<string, string> = {};
@@ -211,6 +213,8 @@ export class ApprovalsComponent implements OnInit {
   }
 
   private async load(): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       const board = await this.api.get<ApprovalsBoard>('/v1/approvals');
       this.waiting = board.waiting;
@@ -223,6 +227,8 @@ export class ApprovalsComponent implements OnInit {
       this.applyFilter();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load approvals.';
+    } finally {
+      this.loading = false;
     }
   }
 }

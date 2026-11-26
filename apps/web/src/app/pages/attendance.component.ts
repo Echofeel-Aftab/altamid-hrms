@@ -256,7 +256,7 @@ interface LiveRow { id: string; name: string; code: string; kind: string; at: st
         </div>
       </section>
     }
-    <app-data-table tableId="who-is-in" title="Who is in" empty="No one has punched yet today." [rows]="board" [columns]="boardColumns" />
+    <app-data-table tableId="who-is-in" title="Who is in" empty="No one has punched yet today." [rows]="board" [columns]="boardColumns" [loading]="loadingBoard" />
   `,
 })
 export class AttendanceComponent implements OnInit, OnDestroy {
@@ -265,6 +265,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   readonly dow = DOW;
   mine: PunchState | null = null;
   board: BoardRow[] = [];
+  loadingBoard = true;
   calendar: CalendarView | null = null;
   picked: string[] = [];
   selected: CalDay | null = null;
@@ -606,12 +607,15 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   }
 
   private async loadPunch(): Promise<void> {
+    this.loadingBoard = true;
     try {
       const data = await this.api.get<{ mine: PunchState | null; board: BoardRow[] }>('/v1/attendance');
       this.mine = data.mine;
       this.board = data.board;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load attendance.';
+    } finally {
+      this.loadingBoard = false;
     }
   }
 

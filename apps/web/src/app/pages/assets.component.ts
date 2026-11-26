@@ -299,7 +299,7 @@ const EVENT_ICON: Record<string, string> = {
     </app-modal>
 
     @if (manage && !editing) {
-      <app-data-table tableId="assets" title="Asset register" [rows]="filtered" [columns]="columns" empty="No assets yet. Add the first one to start the register.">
+      <app-data-table tableId="assets" title="Asset register" [rows]="filtered" [columns]="columns" empty="No assets yet. Add the first one to start the register." [loading]="loading">
         <div tableFilter class="asset-filter">
           <select [(ngModel)]="kindFilter" aria-label="Kind">
             <option value="">All kinds</option>
@@ -364,6 +364,7 @@ export class AssetsComponent implements OnInit {
   statusFilter = '';
   error = '';
   ok = '';
+  loading = true;
   busy = false;
   catalog: Record<string, KindDetails> = {};
   detailValues: Record<string, DetailValues> = {};
@@ -731,6 +732,8 @@ export class AssetsComponent implements OnInit {
   }
 
   private async load(focus = ''): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       const data = await this.api.get<{ manage: boolean; kinds: Kind[]; locations: Array<{ id: string; name: string }>; stats: Stats | null; items: AssetRow[] }>('/v1/assets');
       this.manage = data.manage;
@@ -750,6 +753,8 @@ export class AssetsComponent implements OnInit {
       else if (this.open) this.open = this.items.find((item) => item.id === this.open?.id) || null;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load assets.';
+    } finally {
+      this.loading = false;
     }
   }
 }

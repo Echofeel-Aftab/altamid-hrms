@@ -78,7 +78,7 @@ export function scoreLabel(score: number | null | undefined): string {
       }
     </div>
 
-    <app-data-table tableId="hiring-applications" title="Received" empty="No applications match." [rows]="filtered()" [columns]="columns">
+    <app-data-table tableId="hiring-applications" title="Received" empty="No applications match." [rows]="filtered()" [columns]="columns" [loading]="loading">
       <div tableFilter class="asset-filter">
         <select [(ngModel)]="statusFilter" aria-label="Status">
           <option value="">Every status</option>
@@ -144,6 +144,7 @@ export class ApplicationsComponent implements OnInit {
   readonly statuses = APPLICATION_STATUSES;
   rows: ApplicationRow[] = [];
   error = '';
+  loading = true;
   statusFilter = '';
   jobFilter = '';
   sourceFilter = '';
@@ -261,10 +262,14 @@ export class ApplicationsComponent implements OnInit {
   }
 
   private async load(): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       this.rows = await this.api.get<ApplicationRow[]>('/v1/hiring/applications');
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load applications.';
+    } finally {
+      this.loading = false;
     }
   }
 }

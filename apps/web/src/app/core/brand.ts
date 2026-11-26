@@ -153,6 +153,10 @@ export function applyBrand(colors: Record<string, string> | undefined): void {
       --border-strong: ${mix(x('border'), x('muted'), 0.35)};
       --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
       --shadow-lg: 0 6px 16px -8px ${hexAlpha(primary, 0.2)};
+      --ring: 0 0 0 4px ${hexAlpha(navy600, 0.16)};
+      --navy-alpha-06: ${hexAlpha(primary, 0.06)}; --navy-alpha-08: ${hexAlpha(primary, 0.08)};
+      --navy-alpha-10: ${hexAlpha(primary, 0.1)}; --navy-alpha-12: ${hexAlpha(primary, 0.12)};
+      --gold-alpha-14: ${hexAlpha(accent, 0.14)}; --gold-alpha-25: ${hexAlpha(accent, 0.25)}; --gold-alpha-32: ${hexAlpha(accent, 0.32)};
     }
     html.theme-dark {
       --bg: ${x('dark_bg')}; --card: ${x('dark_card')}; --text: ${x('dark_text')}; --muted: ${x('dark_muted')}; --border: ${x('dark_border')}; --heading: ${x('dark_heading')};
@@ -160,6 +164,10 @@ export function applyBrand(colors: Record<string, string> | undefined): void {
       --gold-400: ${x('dark_accent')}; --gold-500: ${x('dark_btn_accent')}; --gold-600: ${darken(x('dark_btn_accent'), 0.1)};
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
       --shadow-lg: 0 10px 28px -12px rgba(0, 0, 0, 0.55);
+      --ring: 0 0 0 4px ${hexAlpha(x('dark_accent'), 0.18)};
+      --navy-alpha-06: ${hexAlpha(x('dark_accent'), 0.08)}; --navy-alpha-08: ${hexAlpha(x('dark_accent'), 0.12)};
+      --navy-alpha-10: ${hexAlpha(x('dark_accent'), 0.14)}; --navy-alpha-12: ${hexAlpha(x('dark_accent'), 0.18)};
+      --gold-alpha-14: ${hexAlpha(x('dark_accent'), 0.14)}; --gold-alpha-25: ${hexAlpha(x('dark_btn_accent'), 0.22)}; --gold-alpha-32: ${hexAlpha(x('dark_btn_accent'), 0.32)};
     }
     .sidebar {
       --sb-bg: linear-gradient(180deg, ${lighten(x('sidebar_bg'), 0.45)} 0%, ${x('sidebar_bg')} 100%);
@@ -175,6 +183,20 @@ export function applyBrand(colors: Record<string, string> | undefined): void {
     }
     .topbar { background: ${x('topbar_bg')}; }
     html.theme-dark .topbar { background: ${x('dark_card')}; }
+    .topbar-search input { background: ${x('bg')}; border-color: ${mix(x('border'), x('muted'), 0.35)}; color: ${x('text')}; }
+    .topbar-search input:focus { background: ${x('card')}; border-color: ${navy600}; box-shadow: 0 0 0 4px ${hexAlpha(navy600, 0.16)}; }
+    html.theme-dark .topbar-search input { background: ${darken(x('dark_card'), 0.12)}; border-color: ${lighten(x('dark_border'), 0.12)}; color: ${x('dark_text')}; }
+    html.theme-dark .topbar-search input:focus { background: ${x('dark_card')}; border-color: ${x('dark_accent')}; box-shadow: 0 0 0 4px ${hexAlpha(x('dark_accent'), 0.18)}; }
+    .icon-btn { background: ${x('card')}; color: ${primary}; border-color: ${x('border')}; }
+    html.theme-dark .icon-btn { background: ${x('dark_card')}; color: ${x('dark_accent')}; border-color: ${x('dark_border')}; }
+    .dt-title, .dt-toolbar { background: ${x('card')}; border-color: ${x('border')}; }
+    html.theme-dark .dt-title, html.theme-dark .dt-toolbar { background: ${x('dark_card')}; border-color: ${x('dark_border')}; }
+    .empty-state > i { color: ${gold600}; background: ${hexAlpha(accent, 0.25)}; }
+    html.theme-dark .empty-state > i { color: ${x('dark_accent')}; background: ${hexAlpha(x('dark_accent'), 0.14)}; }
+    .empty-state strong { color: ${x('heading')}; }
+    html.theme-dark .empty-state strong { color: ${x('dark_heading')}; }
+    .settings-tab:hover { background: ${hexAlpha(primary, 0.06)}; color: ${x('heading')}; }
+    html.theme-dark .settings-tab:hover { background: rgba(255, 255, 255, 0.05); color: ${x('dark_heading')}; }
     .btn, .btn-primary { background: ${x('btn_primary')}; border-color: ${x('btn_primary')}; color: ${primaryText}; }
     .btn:hover, .btn-primary:hover { background: ${x('btn_primary_hover')}; border-color: ${x('btn_primary_hover')}; color: ${primaryText}; }
     .btn-ghost, .btn-secondary { background: ${x('card')}; color: ${x('heading')}; border-color: ${x('border')}; }

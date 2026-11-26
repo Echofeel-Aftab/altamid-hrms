@@ -81,8 +81,21 @@ export class RowActionsDirective<T> {
       <div class="dt-filter">
         <ng-content select="[tableFilter]" />
       </div>
-      <div class="table-responsive">
-        @if (!filtered.length) {
+      <div class="table-responsive" [attr.aria-busy]="loading || null">
+        @if (loading) {
+          <div class="dt-skeleton" aria-hidden="true">
+            @for (row of skeletonRows; track row) {
+              <div class="dt-skeleton-row">
+                <span class="skeleton skeleton-line is-mid"></span>
+                <span class="skeleton skeleton-line"></span>
+                <span class="skeleton skeleton-line is-short"></span>
+                <span class="skeleton skeleton-line is-mid"></span>
+                <span class="skeleton skeleton-line is-short"></span>
+              </div>
+            }
+          </div>
+          <p class="sr">Loading table…</p>
+        } @else if (!filtered.length) {
           <div class="empty-state">
             <i class="bi bi-inbox"></i>
             <strong>{{ query ? 'Nothing matches' : 'Nothing here yet' }}</strong>
@@ -144,24 +157,26 @@ export class RowActionsDirective<T> {
           </table>
         }
       </div>
-      <div class="dt-footer">
-        <div class="listing-pager-meta">Showing {{ from }} to {{ to }} of {{ filtered.length }} entries</div>
-        <nav>
-          <ul class="pagination">
-            <li class="page-item" [class.disabled]="page <= 1">
-              <button type="button" class="page-link" (click)="go(page - 1)" [disabled]="page <= 1">Previous</button>
-            </li>
-            @for (n of pages; track n) {
-              <li class="page-item" [class.active]="n === page">
-                <button type="button" class="page-link" (click)="go(n)">{{ n }}</button>
+      @if (!loading && filtered.length) {
+        <div class="dt-footer">
+          <div class="listing-pager-meta">Showing {{ from }} to {{ to }} of {{ filtered.length }} entries</div>
+          <nav>
+            <ul class="pagination">
+              <li class="page-item" [class.disabled]="page <= 1">
+                <button type="button" class="page-link" (click)="go(page - 1)" [disabled]="page <= 1">Previous</button>
               </li>
-            }
-            <li class="page-item" [class.disabled]="page >= lastPage">
-              <button type="button" class="page-link" (click)="go(page + 1)" [disabled]="page >= lastPage">Next</button>
-            </li>
-          </ul>
-        </nav>
-      </div>
+              @for (n of pages; track n) {
+                <li class="page-item" [class.active]="n === page">
+                  <button type="button" class="page-link" (click)="go(n)">{{ n }}</button>
+                </li>
+              }
+              <li class="page-item" [class.disabled]="page >= lastPage">
+                <button type="button" class="page-link" (click)="go(page + 1)" [disabled]="page >= lastPage">Next</button>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      }
     </section>
   `,
 })
@@ -176,9 +191,11 @@ export class DataTableComponent<T> implements OnInit {
   @Input() hint = '';
   @Input() empty = 'No rows yet.';
   @Input() tableId = 'table';
+  @Input() loading = false;
   @ContentChild(RowActionsDirective) actions?: RowActionsDirective<T>;
   readonly pill = pillClass;
   readonly pageSizes = [10, 20, 50, 100];
+  readonly skeletonRows = [1, 2, 3, 4, 5, 6];
   query = '';
   perPage = 20;
   page = 1;

@@ -44,6 +44,19 @@ interface PayAccount { id: string; label: string; bank: string; mask: string; is
           <input type="month" [(ngModel)]="month" (ngModelChange)="load()" aria-label="Payroll month" />
         </label>
       </div>
+      @if (loading && !board) {
+        <div class="dt-skeleton" aria-busy="true" aria-label="Loading payroll month">
+          @for (row of [1,2,3,4,5]; track row) {
+            <div class="dt-skeleton-row">
+              <span class="skeleton skeleton-line is-mid"></span>
+              <span class="skeleton skeleton-line"></span>
+              <span class="skeleton skeleton-line is-short"></span>
+              <span class="skeleton skeleton-line is-mid"></span>
+              <span class="skeleton skeleton-line is-short"></span>
+            </div>
+          }
+        </div>
+      }
       @if (board) {
         <div class="pm-tiles">
           <div class="pm-tile"><span>People</span><strong>{{ board.totals.people }}</strong></div>
@@ -85,7 +98,7 @@ interface PayAccount { id: string; label: string; bank: string; mask: string; is
             <i class="bi bi-bank"></i> Bank transfer file
           </button>
         </div>
-        <app-data-table tableId="payroll-month" title="People in the month" empty="Nobody was employed in this month." [rows]="board.rows" [columns]="columns">
+        <app-data-table tableId="payroll-month" title="People in the month" empty="Nobody was employed in this month." [rows]="board.rows" [columns]="columns" [loading]="loading">
           <ng-template appRowActions let-item>
             <button type="button" class="btn btn-sm" (click)="open.emit(item.employeeId)"><i class="bi bi-pencil-square"></i> Open</button>
           </ng-template>
@@ -102,6 +115,7 @@ export class PayrollMonthComponent implements OnInit {
 
   month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
   board: MonthBoard | null = null;
+  loading = true;
   busy = false;
 
   readonly columns: DataColumn<MonthRow>[] = [
@@ -139,12 +153,15 @@ export class PayrollMonthComponent implements OnInit {
 
   async load(): Promise<void> {
     if (!/^\d{4}-\d{2}$/.test(this.month)) return;
+    this.loading = true;
     try {
       this.board = await this.api.get<MonthBoard>('/v1/payroll/month/' + this.month);
       if (!this.board.accounts.some((account) => account.id === this.accountId)) this.accountId = this.board.accounts.find((account) => account.isDefault)?.id || '';
     } catch (error) {
       this.board = null;
       await this.sweet.error({ title: 'Payroll month not loaded', text: this.message(error) });
+    } finally {
+      this.loading = false;
     }
   }
 

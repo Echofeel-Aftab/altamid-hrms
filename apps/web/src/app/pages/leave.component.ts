@@ -63,7 +63,7 @@ import { LeavePick, LeaveTypePickComponent } from '../shared/leave-type-pick.com
       </aside>
       </div>
     }
-    <app-data-table tableId="my-leave" title="Your requests" empty="No requests yet." [rows]="mine" [columns]="requestColumns">
+    <app-data-table tableId="my-leave" title="Your requests" empty="No requests yet." [rows]="mine" [columns]="requestColumns" [loading]="loading">
       <ng-template appRowActions let-item>
         @if (item.status === 'pending') {
           <button class="btn btn-ghost btn-sm" type="button" (click)="cancel(item)">Cancel</button>
@@ -93,6 +93,7 @@ export class LeaveComponent implements OnInit {
   reason = '';
   error = '';
   ok = '';
+  loading = true;
   busy = false;
 
   onHalf(half: boolean): void {
@@ -158,6 +159,8 @@ export class LeaveComponent implements OnInit {
   }
 
   private async load(): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       const data = await this.api.get<{ balances: LeaveBalance[]; types: LeaveType[]; mine: LeaveRequest[] }>('/v1/leave');
       this.balances = data.balances;
@@ -166,6 +169,8 @@ export class LeaveComponent implements OnInit {
       if (!this.leaveTypeId && data.types[0]) this.leaveTypeId = data.types[0].id;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load leave.';
+    } finally {
+      this.loading = false;
     }
   }
 }

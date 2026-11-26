@@ -49,7 +49,7 @@ interface PortalDesk {
     </div>
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
-    <app-data-table tableId="hiring-jobs" title="Openings" hint="Open a job and tick the portals it should appear on. Applications from those portals land with HR." empty="No jobs yet. Create one, then open it." [rows]="jobs" [columns]="columns" />
+    <app-data-table tableId="hiring-jobs" title="Openings" hint="Open a job and tick the portals it should appear on. Applications from those portals land with HR." empty="No jobs yet. Create one, then open it." [rows]="jobs" [columns]="columns" [loading]="loading" />
 
     @if (desk) {
       <section class="card portal-board">
@@ -93,6 +93,7 @@ export class HiringComponent implements OnInit {
   desk: PortalDesk | null = null;
   error = '';
   ok = '';
+  loading = true;
   busy = false;
   readonly columns: DataColumn<JobRow>[] = [
     { key: 'title', label: 'Job', text: (row) => row.title, sub: (row) => row.department || row.code, link: (row) => '/hiring/' + row.id },
@@ -170,12 +171,16 @@ export class HiringComponent implements OnInit {
   }
 
   private async load(): Promise<void> {
+    this.loading = true;
+    this.error = '';
     try {
       const data = await this.api.get<{ jobs: JobRow[]; portals: PortalDesk }>('/v1/hiring');
       this.jobs = data.jobs;
       this.desk = data.portals;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not load hiring.';
+    } finally {
+      this.loading = false;
     }
   }
 }
