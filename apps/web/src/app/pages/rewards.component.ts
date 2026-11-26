@@ -53,7 +53,7 @@ const KIND_LABEL: Record<Kind, string> = { insurance: 'Insurance', wellness: 'We
         <div class="rw-rail-actions">
           @if (view.canDesk && tab === 'statement') {
             <label class="rw-who">
-              <span>Person</span>
+              <span class="sr">Person</span>
               <select [ngModel]="personId" (ngModelChange)="pick($event)" aria-label="Show the statement for">
                 <option value="">My statement</option>
                 @for (person of view.people; track person.id) { <option [value]="person.id">{{ person.name }} · {{ person.code }}</option> }
@@ -61,7 +61,7 @@ const KIND_LABEL: Record<Kind, string> = { insurance: 'Insurance', wellness: 'We
             </label>
           }
           @if (tab === 'statement' && view.statement) {
-            <button type="button" class="btn btn-gold" (click)="download()" [disabled]="busy"><i class="bi bi-file-earmark-pdf"></i> Statement PDF</button>
+            <button type="button" class="btn btn-gold btn-sm" (click)="download()" [disabled]="busy"><i class="bi bi-file-earmark-pdf"></i> Statement PDF</button>
           }
         </div>
       </div>
