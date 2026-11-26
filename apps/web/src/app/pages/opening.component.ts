@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { SessionStore } from '../core/session.store';
 import { RichEditorComponent } from '../shared/rich-editor.component';
+import { Sweet } from '../shared/sweet';
 
 interface PortalChoice {
   id: string;
@@ -192,6 +193,7 @@ const PORTALS: PortalChoice[] = [
 })
 export class OpeningComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly store = inject(SessionStore);
@@ -292,7 +294,13 @@ export class OpeningComponent implements OnInit {
 
   async remove(): Promise<void> {
     if (!this.job) return;
-    if (!confirm('Delete this draft?')) return;
+    const go = await this.sweet.confirm({
+      title: 'Delete this draft?',
+      text: 'This job draft is removed and cannot be restored.',
+      confirmText: 'Delete',
+      danger: true,
+    });
+    if (!go) return;
     this.busy = true;
     this.error = '';
     try {

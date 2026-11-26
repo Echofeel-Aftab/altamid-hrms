@@ -20,6 +20,7 @@ import { HomeLayoutSettingsComponent } from './home-layout-settings.component';
 import { OutletSettingsComponent } from './outlet-settings.component';
 import { ApprovalFlowsSettingsComponent } from './approval-flows-settings.component';
 import { PasswordToggleDirective } from '../shared/password-toggle.directive';
+import { Sweet } from '../shared/sweet';
 
 interface Licence {
   mode: string;
@@ -212,6 +213,7 @@ export class SettingsComponent implements OnInit {
   private readonly store = inject(SessionStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly sweet = inject(Sweet);
   readonly primary = [
     { id: 'general', icon: 'bi bi-building', label: 'General', hint: 'Company and brand' },
     { id: 'rules', icon: 'bi bi-robot', label: 'Rules', hint: 'People, leave, hiring' },
@@ -378,7 +380,13 @@ export class SettingsComponent implements OnInit {
   }
 
   async deactivateLicence(): Promise<void> {
-    if (!window.confirm('Deactivate this licence? New people and payroll stay paused until you activate a key again.')) return;
+    const go = await this.sweet.confirm({
+      title: 'Deactivate this licence?',
+      text: 'New people and payroll stay paused until you activate a key again.',
+      confirmText: 'Deactivate',
+      danger: true,
+    });
+    if (!go) return;
     await this.runLicence('off', { licenseKey: '' }, 'Licence deactivated.');
   }
 

@@ -33,10 +33,12 @@ interface Boot {
   selector: 'app-ai-chat-widget',
   imports: [FormsModule],
   template: `
-    <button type="button" class="ai-chat-fab" (click)="toggle()" aria-label="Open assistant">
-      <i class="bi bi-stars"></i>
-    </button>
-    @if (open()) {
+    @if (ready()) {
+      <button type="button" class="ai-chat-fab" (click)="toggle()" aria-label="Open assistant">
+        <i class="bi bi-stars"></i>
+      </button>
+    }
+    @if (ready() && open()) {
       <section class="ai-chat-panel card" aria-label="Assistant">
         <header class="ai-chat-head">
           <div>
@@ -209,14 +211,16 @@ export class AiChatWidgetComponent implements OnInit, OnDestroy {
       this.enabled.set(!!boot.enabled);
       this.ready.set(!!boot.ready);
       this.chips.set(boot.chips || []);
+      if (!boot.ready) {
+        this.open.set(false);
+        return;
+      }
       if (resetGreeting || !this.lines().length) this.lines.set([{ role: 'assistant', content: this.greeting(boot) }]);
     } catch {
       this.enabled.set(false);
       this.ready.set(false);
       this.chips.set([]);
-      if (resetGreeting || !this.lines().length) {
-        this.lines.set([{ role: 'assistant', content: 'Could not load the assistant. Refresh the page, or check Settings → Integrations → AI.' }]);
-      }
+      this.open.set(false);
     }
   }
 

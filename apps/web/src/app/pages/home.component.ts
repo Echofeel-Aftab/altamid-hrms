@@ -864,8 +864,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     window.removeEventListener('beforeunload', this.warnUnsaved);
   }
 
-  mayLeave(): boolean {
-    return !this.changed() || window.confirm('Your Home arrangement is not saved. Leave without saving?');
+  async mayLeave(): Promise<boolean> {
+    if (!this.changed()) return true;
+    return this.sweet.confirm({
+      title: 'Leave without saving?',
+      text: 'Your Home arrangement is not saved. Leave without saving?',
+      confirmText: 'Leave',
+      cancelText: 'Stay',
+      danger: true,
+    });
   }
 
   /** True when the arrangement differs from the one the editor opened with. */

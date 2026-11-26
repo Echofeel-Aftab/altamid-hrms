@@ -2,6 +2,7 @@ import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
 import { PhotoComponent } from '../shared/photo.component';
+import { Sweet } from '../shared/sweet';
 
 interface GrowthLine { side: string; name: string; amount?: string; rupees: string }
 interface GrowthPoint { year: number; label: string; rating: number; joined: boolean; draft: boolean }
@@ -251,6 +252,7 @@ interface Plot { w: number; h: number; left: number; right: number; points: stri
 })
 export class GrowthComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   view: GrowthView | null = null;
   error = '';
   formNote = '';
@@ -369,7 +371,13 @@ export class GrowthComponent implements OnInit {
 
   async removeYear(): Promise<void> {
     if (!this.view?.person || !this.editingYear) return;
-    if (!window.confirm(`Remove the ${this.editingYear} appraisal? The chart and the CTC breakup for that year go with it.`)) return;
+    const go = await this.sweet.confirm({
+      title: `Remove the ${this.editingYear} appraisal?`,
+      text: 'The chart and the CTC breakup for that year go with it.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!go) return;
     this.busy = true;
     this.formNote = '';
     try {

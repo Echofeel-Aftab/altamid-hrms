@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { DataColumn, DataTableComponent } from '../shared/data-table.component';
+import { Sweet } from '../shared/sweet';
 
 interface JobRow {
   id: string;
@@ -89,6 +90,7 @@ interface PortalDesk {
 })
 export class HiringComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   jobs: JobRow[] = [];
   desk: PortalDesk | null = null;
   error = '';
@@ -141,7 +143,13 @@ export class HiringComponent implements OnInit {
 
   async rotate(): Promise<void> {
     if (!this.desk) return;
-    if (!confirm('Replace the feed address? Portals using the old one will stop receiving jobs until you paste the new address.')) return;
+    const go = await this.sweet.confirm({
+      title: 'Replace the feed address?',
+      text: 'Portals using the old one will stop receiving jobs until you paste the new address.',
+      confirmText: 'Replace',
+      danger: true,
+    });
+    if (!go) return;
     this.busy = true;
     this.error = '';
     this.ok = '';

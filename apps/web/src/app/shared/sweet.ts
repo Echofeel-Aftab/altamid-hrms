@@ -47,6 +47,25 @@ let serial = 0;
 export class Sweet {
   private readonly sanitizer = inject(DomSanitizer);
   readonly queue = signal<SweetItem[]>([]);
+  private static guardsOn = false;
+
+  constructor() {
+    this.guardBrowserDialogs();
+  }
+
+  /** Route native alert/confirm through the centered sweet modal so nothing falls back to the browser chrome. */
+  private guardBrowserDialogs(): void {
+    if (Sweet.guardsOn || typeof window === 'undefined') return;
+    Sweet.guardsOn = true;
+    window.alert = (message?: string) => {
+      void this.info({ title: 'Notice', text: String(message ?? ''), confirmText: 'Got it' });
+    };
+    window.confirm = ((message?: string) => {
+      void this.confirm({ title: 'Please confirm', text: String(message ?? ''), confirmText: 'Continue', cancelText: 'Cancel' });
+      // Native confirm is sync; callers must use Sweet.confirm instead. Returning false refuses the unsafe path.
+      return false;
+    }) as typeof window.confirm;
+  }
 
   info(options: SweetOptions | string): Promise<boolean> {
     return this.push('alert', { kind: 'info', ...this.wrap(options) });
