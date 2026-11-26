@@ -3,10 +3,11 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { STATES } from '../core/models';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 
 @Component({
   selector: 'app-start',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PasswordToggleDirective],
   template: `
     <div class="auth-page">
       <div class="auth-scene" aria-hidden="true">

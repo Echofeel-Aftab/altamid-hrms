@@ -4,6 +4,7 @@ import { ApiService } from '../core/api.service';
 import { DataColumn, DataTableComponent, RowActionsDirective } from '../shared/data-table.component';
 import { PhotoComponent } from '../shared/photo.component';
 import { ModalComponent } from '../shared/modal.component';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 
 interface AssetRow {
   id: string;
@@ -70,7 +71,7 @@ const EVENT_ICON: Record<string, string> = {
 
 @Component({
   selector: 'app-assets',
-  imports: [FormsModule, PhotoComponent, DataTableComponent, RowActionsDirective, ModalComponent],
+  imports: [FormsModule, PhotoComponent, DataTableComponent, RowActionsDirective, ModalComponent, PasswordToggleDirective],
   template: `
     <div class="page-head">
       <div>

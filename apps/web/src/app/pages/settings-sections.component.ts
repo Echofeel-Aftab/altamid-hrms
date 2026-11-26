@@ -19,6 +19,7 @@ import {
   SmtpAccountView,
   StatutorySettings,
 } from '../core/settings';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 import { BrandSettingsComponent } from './brand-settings.component';
 import { SettingsAiComponent } from './settings-ai.component';
 
@@ -362,7 +363,7 @@ export class SettingsGeneralComponent implements OnInit {
 
 @Component({
   selector: 'app-settings-email',
-  imports: [FormsModule],
+  imports: [FormsModule, PasswordToggleDirective],
   template: `
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }
@@ -700,7 +701,7 @@ export class SettingsEmailComponent implements OnInit {
 
 @Component({
   selector: 'app-settings-integrations',
-  imports: [FormsModule, SettingsAiComponent],
+  imports: [FormsModule, SettingsAiComponent, PasswordToggleDirective],
   template: `
     @if (error) { <p class="form-error">{{ error }}</p> }
     @if (ok) { <p class="form-ok">{{ ok }}</p> }

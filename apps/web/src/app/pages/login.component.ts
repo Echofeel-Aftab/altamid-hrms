@@ -2,10 +2,11 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, PasswordToggleDirective],
   template: `
     <div class="auth-page">
       <div class="auth-scene" aria-hidden="true">

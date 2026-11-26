@@ -8,6 +8,7 @@ import { Org, Person } from '../core/models';
 import { SessionStore } from '../core/session.store';
 import { AccessPanelComponent } from './access-panel.component';
 import { squarePhoto } from '../core/photo';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 import { PhotoComponent } from '../shared/photo.component';
 
 type Draft = Record<string, string | boolean>;
@@ -30,7 +31,7 @@ const SECRET = new Set(['pan', 'bankAccount', 'ifsc', 'password', 'aadhaar']);
 
 @Component({
   selector: 'app-person',
-  imports: [FormsModule, RouterLink, AccessPanelComponent, PhotoComponent],
+  imports: [FormsModule, RouterLink, AccessPanelComponent, PhotoComponent, PasswordToggleDirective],
   template: `
     <div class="page-head">
       <div>

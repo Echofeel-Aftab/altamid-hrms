@@ -1256,11 +1256,30 @@ html.theme-dark .auth-card h1 { color: #fff; }
 html.theme-dark .auth-field label { color: #c5d0dc; }
 .auth-input { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; background: #fff; }
 html.theme-dark .auth-input { background: #121820; border-color: #334155; }
-.auth-input i { color: #9a7a18; }
-html.theme-dark .auth-input i { color: var(--gold-400); }
+.auth-input > i { color: #9a7a18; }
+html.theme-dark .auth-input > i { color: var(--gold-400); }
 .auth-input input, .auth-input select { flex: 1; width: 100%; border: 0; background: transparent; box-shadow: none; min-height: 42px; padding: 10px 0; }
 .auth-input:focus-within { border-color: rgba(200, 168, 80, 0.85); box-shadow: 0 0 0 3px rgba(200, 168, 80, 0.22); }
 .auth-input input:focus, .auth-input select:focus { outline: none; border-color: transparent; box-shadow: none; }
+
+/* Show / hide password eye (PasswordToggleDirective). */
+.pw-wrap { position: relative; width: 100%; min-width: 0; }
+.pw-wrap:not(.auth-input) > input { width: 100%; padding-right: 42px; }
+.pw-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; margin: 0; padding: 0; border: 0; border-radius: 8px;
+  display: inline-grid; place-items: center; background: transparent; color: var(--muted);
+  cursor: pointer; z-index: 2;
+}
+.pw-toggle:hover { color: var(--heading); background: rgba(16, 56, 96, 0.06); }
+.pw-toggle:focus-visible { outline: 2px solid var(--navy-600); outline-offset: 1px; }
+html.theme-dark .pw-toggle { color: #c5d0da; }
+html.theme-dark .pw-toggle:hover { color: var(--gold-400); background: rgba(232, 200, 92, 0.14); }
+html.theme-dark .pw-toggle:focus-visible { outline-color: var(--gold-500); }
+.pw-toggle .bi { font-size: 15px; line-height: 1; }
+.auth-input.pw-wrap { padding-right: 6px; }
+.auth-input.pw-wrap .pw-toggle { position: static; transform: none; flex: 0 0 auto; }
+.auth-input.pw-wrap > input { padding-right: 0; }
 .auth-card .btn-gold { width: 100%; margin-top: 6px; }
 .auth-switch { margin: 14px 0 0; text-align: center; color: var(--muted); }
 

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { AiStatusService } from '../core/ai-status.service';
 import { ApiService } from '../core/api.service';
 import { AiAccountView, AiSettingsView, SettingsView } from '../core/settings';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 import { Sweet } from '../shared/sweet';
 
 const PROVIDERS = [
@@ -15,7 +16,7 @@ const PROVIDERS = [
 
 @Component({
   selector: 'app-settings-ai',
-  imports: [FormsModule],
+  imports: [FormsModule, PasswordToggleDirective],
   template: `
     <div class="att-stack">
       <header class="settings-panel-head">

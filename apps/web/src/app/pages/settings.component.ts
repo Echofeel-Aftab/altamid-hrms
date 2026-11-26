@@ -19,6 +19,7 @@ import { SettingsRulesComponent } from './rules-settings.component';
 import { HomeLayoutSettingsComponent } from './home-layout-settings.component';
 import { OutletSettingsComponent } from './outlet-settings.component';
 import { ApprovalFlowsSettingsComponent } from './approval-flows-settings.component';
+import { PasswordToggleDirective } from '../shared/password-toggle.directive';
 
 interface Licence {
   mode: string;
@@ -43,6 +44,7 @@ interface Licence {
   selector: 'app-settings',
   imports: [
     FormsModule,
+    PasswordToggleDirective,
     SettingsGeneralComponent,
     SettingsEmailComponent,
     SettingsFormsComponent,
