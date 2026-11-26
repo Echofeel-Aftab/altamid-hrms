@@ -183,10 +183,10 @@ export function applyBrand(colors: Record<string, string> | undefined): void {
     }
     .topbar { background: ${x('topbar_bg')}; }
     html.theme-dark .topbar { background: ${x('dark_card')}; }
-    .topbar-search input { background: ${x('bg')}; border-color: ${mix(x('border'), x('muted'), 0.35)}; color: ${x('text')}; }
-    .topbar-search input:focus { background: ${x('card')}; border-color: ${navy600}; box-shadow: 0 0 0 4px ${hexAlpha(navy600, 0.16)}; }
-    html.theme-dark .topbar-search input { background: ${darken(x('dark_card'), 0.12)}; border-color: ${lighten(x('dark_border'), 0.12)}; color: ${x('dark_text')}; }
-    html.theme-dark .topbar-search input:focus { background: ${x('dark_card')}; border-color: ${x('dark_accent')}; box-shadow: 0 0 0 4px ${hexAlpha(x('dark_accent'), 0.18)}; }
+    .topbar-search-field { background: ${x('bg')}; border-color: ${mix(x('border'), x('muted'), 0.35)}; color: ${x('text')}; }
+    .topbar-search-field:focus-within { background: ${x('card')}; border-color: ${navy600}; box-shadow: 0 0 0 4px ${hexAlpha(navy600, 0.16)}; }
+    html.theme-dark .topbar-search-field { background: ${darken(x('dark_card'), 0.12)}; border-color: ${lighten(x('dark_border'), 0.12)}; color: ${x('dark_text')}; }
+    html.theme-dark .topbar-search-field:focus-within { background: ${x('dark_card')}; border-color: ${x('dark_accent')}; box-shadow: 0 0 0 4px ${hexAlpha(x('dark_accent'), 0.18)}; }
     .icon-btn { background: ${x('card')}; color: ${primary}; border-color: ${x('border')}; }
     html.theme-dark .icon-btn { background: ${x('dark_card')}; color: ${x('dark_accent')}; border-color: ${x('dark_border')}; }
     .dt-title, .dt-toolbar { background: ${x('card')}; border-color: ${x('border')}; }
