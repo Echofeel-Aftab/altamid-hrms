@@ -313,9 +313,11 @@ html.theme-dark .icon-btn { color: var(--gold-400); }
   border-radius: 999px;
 }
 .topbar-search-field > i {
-  flex: 0 0 auto; position: static; transform: none; top: auto; left: auto;
-  color: var(--muted); pointer-events: none; line-height: 1; font-size: 14px;
+  flex: 0 0 auto; position: static; top: auto; left: auto;
+  color: var(--muted); pointer-events: none;
+  width: 16px; height: 16px; font-size: 15px; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
+  transform: translateY(1px); /* optical center for bi-search glyph */
 }
 html.theme-dark .topbar-search-field > i { color: #d0b058; }
 .topbar-search-field input {
