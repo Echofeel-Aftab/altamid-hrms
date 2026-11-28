@@ -318,7 +318,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
         <div class="card-head">
           <h2><i class="bi bi-balloon"></i> Company holidays · {{ calendar.year }}</h2>
         </div>
-        <p class="muted">Holidays also appear on the month calendar and are not counted as leave.</p>
+        <p class="muted">These days are off for everyone. They show on the calendar and are not counted as leave.</p>
         @if (calendar.canEditHolidays) {
           <form class="inline-add" (ngSubmit)="addHoliday()">
             <div><label for="hol-day">Date</label><input id="hol-day" name="holidayDay" type="date" [(ngModel)]="holidayDay" required></div>
@@ -329,13 +329,23 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
         @if (!calendar.holidays.length) { <p class="muted">No company holidays in {{ calendar.year }} yet.</p> }
         <div class="holiday-year">
           @for (group of holidayGroups; track group.key) {
-            <section>
+            <section class="holiday-month">
               <h3>{{ group.label }}</h3>
-              <ul class="plain">
+              <ul class="plain holiday-list">
                 @for (item of group.items; track item.id) {
                   <li class="holiday-row">
-                    <span><strong>{{ holidayWhen(item.day) }}</strong> {{ item.name }}</span>
-                    @if (calendar.canEditHolidays) { <button type="button" class="btn btn-ghost btn-sm" (click)="removeHoliday(item.id)">Remove</button> }
+                    <time class="holiday-date" [attr.datetime]="item.day">
+                      <span class="holiday-dow">{{ holidayDow(item.day) }}</span>
+                      <span class="holiday-num">{{ dateNumber(item.day) }}</span>
+                      <span class="holiday-mon">{{ holidayMon(item.day) }}</span>
+                    </time>
+                    <div class="holiday-meta">
+                      <strong class="holiday-name">{{ item.name }}</strong>
+                      <small>For everyone · not leave</small>
+                    </div>
+                    @if (calendar.canEditHolidays) {
+                      <button type="button" class="btn btn-ghost btn-sm holiday-remove" (click)="removeHoliday(item.id)">Remove</button>
+                    }
                   </li>
                 }
               </ul>
@@ -497,7 +507,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
       today: 'Check in, see who is around, and jump into leave or regularization without scrolling the whole desk.',
       month: 'Select one day or several, then apply leave, regularize, work from home, extra time, or on duty.',
       team: 'Everyone who has punched today, with their last punch and where they checked in.',
-      holidays: 'Company holidays for the year. They show on the calendar and are not counted as leave.',
+      holidays: 'Company holidays for everyone. They show on the calendar and are not counted as leave.',
       devices: 'Connect fingerprint, face, or card readers and watch live punches as they arrive.',
     };
     return lines[this.tab];
@@ -735,6 +745,14 @@ export class AttendanceComponent implements OnInit, OnDestroy {
 
   holidayWhen(day: string): string {
     return new Date(day + 'T12:00:00+05:30').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+  }
+
+  holidayDow(day: string): string {
+    return new Date(day + 'T12:00:00+05:30').toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' });
+  }
+
+  holidayMon(day: string): string {
+    return new Date(day + 'T12:00:00+05:30').toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' });
   }
 
   dateNumber(day: string): string {
