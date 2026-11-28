@@ -34,8 +34,9 @@ export class AuthService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService, private readonly settings: SettingsService, private readonly outlets: OutletService) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.ensureColumns().catch((error: unknown) => this.log.warn(`Auth columns: ${error instanceof Error ? error.message : error}`));
+  onModuleInit(): void {
+    // Fire-and-forget so Nest can listen before Neon is warm.
+    void this.ensureColumns().catch((error: unknown) => this.log.warn(`Auth columns: ${error instanceof Error ? error.message : error}`));
   }
 
   hashPassword(password: string): Promise<string> {

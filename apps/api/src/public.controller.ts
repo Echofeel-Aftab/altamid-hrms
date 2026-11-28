@@ -7,6 +7,7 @@ import { DirectoryService } from './directory.service';
 import { FormsService } from './forms.service';
 import { HiringService } from './hiring.service';
 import { emailOf, loginPassword, bag } from './http';
+import { PrismaService } from './prisma.service';
 import { PRODUCT_CODE, PRODUCT_VERSION } from './version';
 
 @Controller('v1')
@@ -18,11 +19,20 @@ export class PublicController {
     private readonly hiring: HiringService,
     private readonly devices: DeviceService,
     private readonly brand: BrandService,
+    private readonly prisma: PrismaService,
   ) {}
 
+  /** Instant liveness (no DB). Use for Hostinger / uptime pings. */
   @Get('health')
   health() {
     return { ok: true, product: PRODUCT_CODE, version: PRODUCT_VERSION };
+  }
+
+  /** Warms Neon. Point a 2‑minute cron here so first human page loads stay fast. */
+  @Get('health/warm')
+  async warm() {
+    const db = await this.prisma.warm();
+    return { ok: true, product: PRODUCT_CODE, version: PRODUCT_VERSION, db };
   }
 
   @Post('start')

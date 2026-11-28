@@ -83,13 +83,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   private keepAlive: ReturnType<typeof setInterval> | null = null;
 
-  async onModuleInit(): Promise<void> {
-    await this.$connect();
-    // Neon can suspend idle compute; a light ping keeps page loads from waiting on a cold start.
+  /**
+   * Do not await $connect here. Hostinger requires listen() within ~3s; Neon cold
+   * starts can take much longer. Prisma connects lazily on first query, and we
+   * warm the pool in the background so login HTML is not blocked.
+   */
+  onModuleInit(): void {
+    void this.warm();
+    // Neon free/suspend tiers drop idle compute; ping often enough to stay warm.
     this.keepAlive = setInterval(() => {
-      this.$queryRaw`SELECT 1`.catch(() => undefined);
-    }, 4 * 60 * 1000);
+      void this.warm();
+    }, 2 * 60 * 1000);
     if (typeof this.keepAlive.unref === 'function') this.keepAlive.unref();
+  }
+
+  /** Light round-trip used by keep-alive and /v1/health/warm. */
+  async warm(): Promise<boolean> {
+    try {
+      await this.$queryRaw`SELECT 1`;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

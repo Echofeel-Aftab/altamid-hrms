@@ -2,6 +2,9 @@
  * Hostinger Nest entry (must be .js).
  * Loads the built HRMS API in-process so Hostinger sees listen() on this PID
  * (spawning a child caused "App did not call listen() within 3 seconds" / 504).
+ *
+ * Keep Neon warm: Hostinger cron every 2 minutes → GET /v1/health/warm
+ * (liveness without DB is GET /v1/health).
  */
 const { join } = require('path');
 

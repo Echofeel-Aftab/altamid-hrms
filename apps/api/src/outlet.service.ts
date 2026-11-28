@@ -28,8 +28,9 @@ export class OutletService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService, private readonly licence: LicenceService) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.backfill().catch((error: unknown) => this.log.error('Outlet backfill failed: ' + String(error)));
+  onModuleInit(): void {
+    // Background only — never block listen()/static login on a Neon wake.
+    void this.backfill().catch((error: unknown) => this.log.error('Outlet backfill failed: ' + String(error)));
   }
 
   /** Every company keeps at least one outlet, and no outlet row is left without one. */

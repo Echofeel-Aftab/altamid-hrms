@@ -57,18 +57,31 @@ async function bootstrap() {
   const web = webDir();
   if (web) {
     const expressApp = app.getHttpAdapter().getInstance();
+    // Hashed SPA assets: long cache. index.html: always revalidate (new deploys).
     expressApp.use((req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/v1')) return next();
-      return expressStatic(web, { index: false })(req, res, next);
+      if (/\.[a-f0-9]{8,}\.(js|css|woff2?|png|jpg|svg|webp)$/i.test(req.path) || /^\/(?:chunk|media|brand)\//i.test(req.path)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      return expressStatic(web, {
+        index: false,
+        setHeaders(fileRes, filePath) {
+          if (filePath.endsWith('index.html')) {
+            fileRes.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          }
+        },
+      })(req, res, next);
     });
     // Express 5 / path-to-regexp 8: named wildcard required (bare '*' throws)
     expressApp.get('/{*path}', (req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/v1')) return next();
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(join(web, 'index.html'), (err) => (err ? next(err) : undefined));
     });
     console.log('Serving HRMS web from ' + web);
   }
 
   await app.listen(Number(process.env.PORT || 4300));
+  console.log('HRMS listening on ' + (process.env.PORT || 4300));
 }
 void bootstrap();
