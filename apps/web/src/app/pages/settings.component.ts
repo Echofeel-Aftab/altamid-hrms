@@ -120,7 +120,7 @@ interface Licence {
         @case ('licence') {
           @if (error) { <p class="form-error">{{ error }}</p> }
           @if (ok) { <p class="form-ok">{{ ok }}</p> }
-          @if (licence?.hasKey && licence.reason !== 'key_unreadable') {
+          @if (licence?.hasKey && licence?.reason !== 'key_unreadable') {
             <section class="settings-card licence-card">
               <header class="settings-card-head">
                 <span class="settings-icon"><i class="bi bi-key"></i></span>
