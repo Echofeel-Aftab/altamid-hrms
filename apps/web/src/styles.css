@@ -1345,20 +1345,27 @@ html.theme-dark .holiday-month {
   gap: 12px;
   align-items: stretch;
 }
-.holiday-year .plain { margin-bottom: 0; }
+.holiday-year .plain,
+.holiday-list.plain { margin-bottom: 0; }
+.holiday-list.plain > li.holiday-row,
 .holiday-row {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 14px;
-  row-gap: 10px;
+  flex-wrap: nowrap;
+  gap: 14px;
   min-height: 72px;
   height: 100%;
   box-sizing: border-box;
+  margin: 0;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
+}
+.holiday-list.plain > li.holiday-row > .btn,
+.holiday-list.plain > li.holiday-row > .holiday-remove {
+  margin-left: 0;
 }
 .holiday-date {
   display: grid;
