@@ -462,7 +462,7 @@ export class SettingsGeneralComponent implements OnInit {
           </div>
           <div class="field-grid">
             <div><label for="smtp-label">Label</label><input id="smtp-label" name="label" [(ngModel)]="label" placeholder="Payslip mailbox" maxlength="60"></div>
-            <div><label for="smtp-user">Username / login email</label><input id="smtp-user" name="username" type="email" [(ngModel)]="username" placeholder="you@gmail.com"></div>
+            <div><label for="smtp-user">Username / login email</label><input id="smtp-user" name="username" type="email" [(ngModel)]="username" placeholder="altamidsolutions@gmail.com"></div>
             <div><label for="smtp-host">Host</label><input id="smtp-host" name="host" [(ngModel)]="host" maxlength="120"></div>
             <div><label for="smtp-port">Port</label><input id="smtp-port" name="port" type="number" [(ngModel)]="port" min="1" max="65535"></div>
             <div>
