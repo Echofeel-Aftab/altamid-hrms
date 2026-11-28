@@ -5,6 +5,7 @@ import { bankFromIfsc, cleanIfsc } from '../core/bank';
 import { Person } from '../core/models';
 import { squarePhoto } from '../core/photo';
 import { PhotoComponent } from '../shared/photo.component';
+import { Sweet } from '../shared/sweet';
 
 interface ChangeView {
   id: string;
@@ -234,6 +235,7 @@ const STATES = [
 })
 export class MyDetailsComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   @Input() personId = '';
   @Output() photo = new EventEmitter<string>();
   readonly bloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -345,6 +347,13 @@ export class MyDetailsComponent implements OnInit {
 
   async cancelChange(): Promise<void> {
     if (!this.change) return;
+    const yes = await this.sweet.confirm({
+      title: 'Withdraw this change request?',
+      text: 'Approvers will no longer see it. Your pay details stay as they were.',
+      confirmText: 'Withdraw',
+      danger: true,
+    });
+    if (!yes) return;
     this.error = '';
     try {
       await this.api.post('/v1/profile/change/' + this.change.id + '/cancel', {});
@@ -378,6 +387,13 @@ export class MyDetailsComponent implements OnInit {
 
   async removePhoto(): Promise<void> {
     if (!this.person) return;
+    const yes = await this.sweet.confirm({
+      title: 'Remove this photo?',
+      text: 'Your profile goes back to the initial until you upload another picture.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     this.photoBusy = true;
     this.error = '';
     try {

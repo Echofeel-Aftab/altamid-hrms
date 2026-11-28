@@ -374,6 +374,14 @@ export class LibraryComponent implements OnInit {
   }
 
   async removeDocument(id: string): Promise<void> {
+    const doc = this.documents.find((row) => row.id === id);
+    const yes = await this.sweet.confirm({
+      title: doc ? `Remove “${doc.title}”?` : 'Remove this document?',
+      text: 'People will no longer be able to open it from the library.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     await this.run('Document removed.', () => this.api.post('/v1/library/files/delete', { id }));
   }
 
@@ -403,6 +411,14 @@ export class LibraryComponent implements OnInit {
   }
 
   async removeHelp(id: string): Promise<void> {
+    const article = this.help.find((row) => row.id === id);
+    const yes = await this.sweet.confirm({
+      title: article ? `Remove “${article.title}”?` : 'Remove this article?',
+      text: 'This help article is deleted for everyone.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     await this.run('Article removed.', () => this.api.post('/v1/library/help/delete', { id }));
   }
 

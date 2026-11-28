@@ -5,6 +5,7 @@ import { LeaveBalance, LeaveRequest, LeaveType } from '../core/models';
 import { SessionStore } from '../core/session.store';
 import { DataColumn, DataTableComponent, RowActionsDirective } from '../shared/data-table.component';
 import { LeavePick, LeaveTypePickComponent } from '../shared/leave-type-pick.component';
+import { Sweet } from '../shared/sweet';
 
 type LeaveTab = 'balances' | 'apply' | 'requests';
 
@@ -104,6 +105,7 @@ type LeaveTab = 'balances' | 'apply' | 'requests';
 export class LeaveComponent implements OnInit {
   readonly store = inject(SessionStore);
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   private readonly tabKey = 'altamid.leave.tab';
   tab: LeaveTab = 'balances';
   balances: LeaveBalance[] = [];
@@ -201,6 +203,13 @@ export class LeaveComponent implements OnInit {
   }
 
   async cancel(item: LeaveRequest): Promise<void> {
+    const yes = await this.sweet.confirm({
+      title: 'Cancel this leave request?',
+      text: 'Approvers will no longer see it. You can apply again later if you still need the days.',
+      confirmText: 'Cancel request',
+      danger: true,
+    });
+    if (!yes) return;
     this.error = '';
     try {
       await this.api.post('/v1/leave/' + item.id + '/decide', { decision: 'cancelled' });

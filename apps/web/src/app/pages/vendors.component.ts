@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { SessionStore } from '../core/session.store';
+import { Sweet } from '../shared/sweet';
 
 interface Vendor {
   id: string;
@@ -122,6 +123,7 @@ type VendorTab = 'list' | 'add';
 export class VendorsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly sweet = inject(Sweet);
   private readonly tabKey = 'altamid.vendors.tab';
   tab: VendorTab = 'list';
   desk: VendorDesk | null = null;
@@ -238,6 +240,13 @@ export class VendorsComponent implements OnInit {
   }
 
   async remove(vendor: Vendor): Promise<void> {
+    const yes = await this.sweet.confirm({
+      title: `Remove ${vendor.name}?`,
+      text: 'This vendor is removed from the list. Existing records that already name them stay as they are.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     this.error = '';
     this.ok = '';
     try {

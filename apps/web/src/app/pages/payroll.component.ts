@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
 import { Person } from '../core/models';
 import { SessionStore } from '../core/session.store';
+import { Sweet } from '../shared/sweet';
 import { PayrollMonthComponent } from './payroll-month.component';
 
 interface EditorLine { side: string; name: string; rupees: string; show: boolean }
@@ -225,6 +226,7 @@ type PersonPayTab = 'ctc' | 'month' | 'form16';
 export class PayrollComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  private readonly sweet = inject(Sweet);
   private readonly tabKey = 'altamid.payroll.tab';
   tab: PayrollTab = 'board';
   personTab: PersonPayTab = 'ctc';
@@ -466,6 +468,14 @@ export class PayrollComponent implements OnInit {
   }
 
   async removeForm(id: string): Promise<void> {
+    const form = this.pack?.forms.find((row) => row.id === id);
+    const yes = await this.sweet.confirm({
+      title: form ? `Remove Form 16 for ${form.year}?` : 'Remove this Form 16?',
+      text: 'The uploaded file is deleted. You can upload another later.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     await this.run('Form 16 removed.', () => this.api.post('/v1/pay/form/delete', { id }));
   }
 
@@ -501,6 +511,14 @@ export class PayrollComponent implements OnInit {
 
   async removeTemplate(): Promise<void> {
     if (!this.templateId) return;
+    const named = this.ctcTemplates.find((item) => item.id === this.templateId)?.name || 'this template';
+    const yes = await this.sweet.confirm({
+      title: `Remove ${named}?`,
+      text: 'People who already have a CTC keep their lines. This template can no longer be applied.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     await this.template(async () => {
       const result = await this.api.post<{ templates: CtcTemplate[] }>('/v1/pay/ctc-templates/delete', { id: this.templateId });
       this.ctcTemplates = result.templates;

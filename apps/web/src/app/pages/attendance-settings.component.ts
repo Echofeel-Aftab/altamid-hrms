@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { Person } from '../core/models';
 import { AttendanceSettings, OfficePoint, SettingsView, WEEKDAYS } from '../core/settings';
+import { Sweet } from '../shared/sweet';
 
 const COUNTRIES = ('AE AF AL AM AO AR AT AU AZ BA BD BE BG BH BN BO BR BT BW BY CA CH CL CM CN CO CR CY CZ DE DK DZ EC EE EG ES ET FI FJ FR GB GE GH GR GT HK HR HU ID IE IL IN IQ IR IS IT JM JO JP KE KG KH KR KW KZ LA LB LK LT LU LV MA MD MM MN MO MT MU MV MX MY MZ NA NG NL NO NP NZ OM PA PE PG PH PK PL PT PY QA RO RS RU RW SA SC SE SG SI SK SN TH TJ TN TR TT TW TZ UA UG US UY UZ VE VN YE ZA ZM ZW').split(' ');
 
@@ -172,6 +173,7 @@ interface OfficeDraft extends OfficePoint { latText: string; lngText: string; bu
 })
 export class SettingsAttendanceComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   readonly days = WEEKDAYS;
   readonly countries = COUNTRIES;
   readonly scopes: Array<{ id: AttendanceSettings['scope']; icon: string; label: string; hint: string }> = [
@@ -281,6 +283,13 @@ export class SettingsAttendanceComponent implements OnInit {
   }
 
   async clearPoint(office: OfficeDraft): Promise<void> {
+    const yes = await this.sweet.confirm({
+      title: `Remove the check-in point for ${office.name || this.where(office)}?`,
+      text: 'People will not be able to check in at this office until a new point is saved.',
+      confirmText: 'Remove point',
+      danger: true,
+    });
+    if (!yes) return;
     await this.point(office, { section: 'geofence', id: office.id, clear: true }, 'Check-in point removed.');
   }
 

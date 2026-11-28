@@ -492,6 +492,13 @@ export class ProfileComponent implements OnInit {
 
   async cancelExit(): Promise<void> {
     if (!this.exit) return;
+    const yes = await this.sweet.confirm({
+      title: 'Take back your resignation?',
+      text: 'Your employment continues as usual. You can resign again later if you need to.',
+      confirmText: 'Take it back',
+      danger: true,
+    });
+    if (!yes) return;
     this.error = '';
     try {
       await this.api.post('/v1/exits/' + this.exit.id + '/cancel', {});

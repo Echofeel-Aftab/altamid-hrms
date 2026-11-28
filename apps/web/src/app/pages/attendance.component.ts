@@ -7,6 +7,7 @@ import { SessionStore } from '../core/session.store';
 import { DataColumn, DataTableComponent } from '../shared/data-table.component';
 import { LeaveTypePickComponent } from '../shared/leave-type-pick.component';
 import { PunchClockComponent } from '../shared/punch-clock.component';
+import { Sweet } from '../shared/sweet';
 
 interface CalDay {
   day: string;
@@ -344,7 +345,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
                       <small>For everyone · not leave</small>
                     </div>
                     @if (calendar.canEditHolidays) {
-                      <button type="button" class="btn btn-ghost btn-sm holiday-remove" (click)="removeHoliday(item.id)">Remove</button>
+                      <button type="button" class="btn btn-ghost btn-sm holiday-remove" (click)="removeHoliday(item)">Remove</button>
                     }
                   </li>
                 }
@@ -411,6 +412,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
 })
 export class AttendanceComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly sweet = inject(Sweet);
   readonly store = inject(SessionStore);
   readonly dow = DOW;
   tab: DeskTab = 'today';
@@ -601,6 +603,14 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   }
 
   async removeReader(id: string): Promise<void> {
+    const reader = this.readers.find((row) => row.id === id);
+    const yes = await this.sweet.confirm({
+      title: reader ? `Remove ${reader.name}?` : 'Remove this reader?',
+      text: 'Punches from this device will no longer be accepted until it is connected again.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     this.error = '';
     try {
       await this.api.post('/v1/attendance/devices/remove', { id });
@@ -724,8 +734,16 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     this.holidayName = '';
   }
 
-  async removeHoliday(id: string): Promise<void> {
-    await this.send('/v1/attendance/holidays/delete', { id }, 'Holiday removed.');
+  async removeHoliday(item: { id: string; day: string; name: string }): Promise<void> {
+    const when = this.holidayWhen(item.day);
+    const yes = await this.sweet.confirm({
+      title: `Remove “${item.name}”?`,
+      text: `${when} will no longer be a company holiday.`,
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
+    await this.send('/v1/attendance/holidays/delete', { id: item.id }, 'Holiday removed.');
   }
 
   get holidayGroups(): Array<{ key: string; label: string; items: Array<{ id: string; day: string; name: string }> }> {

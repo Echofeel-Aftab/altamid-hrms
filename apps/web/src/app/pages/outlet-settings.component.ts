@@ -435,6 +435,13 @@ export class OutletSettingsComponent implements OnInit {
   }
 
   async removeAdmin(outlet: OutletRow, admin: OutletAdmin): Promise<void> {
+    const yes = await this.sweet.confirm({
+      title: `Remove ${admin.name}?`,
+      text: `${admin.name} will no longer manage ${outlet.name}.`,
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!yes) return;
     await this.run(async () => {
       this.board = await this.api.post<OutletBoard>(`/v1/outlets/${outlet.id}/members`, { userId: admin.userId, remove: true });
     }, `${admin.name} no longer works in ${outlet.name}.`);
