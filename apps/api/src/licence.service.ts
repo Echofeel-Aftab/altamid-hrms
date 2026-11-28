@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Company } from '@prisma/client';
 import { dataKey, maskSecret, openSecret, seal } from './crypto';
 import { ALL_ENTITLEMENT_KEYS, HRMS_CORE_FEATURES, entitlementForAccess } from './entitlements';
@@ -18,6 +18,9 @@ const PACKAGE_LABELS: Record<string, string> = {
 const SETUP_FEATURES = new Set(['settings', 'settings.brand', 'access']);
 
 const CORE_SET = () => new Set([...HRMS_CORE_FEATURES, ...SETUP_FEATURES]);
+
+const KEY_UNREADABLE =
+  'The stored license key cannot be read after a host key change. Paste the key again under Settings → Licence. Set DATA_KEY in hosting env so the next deploy keeps secrets readable.';
 
 export interface LicenceView {
   mode: 'setup' | 'allow' | 'restrict';
@@ -52,6 +55,8 @@ export interface OutletAllowance {
 @Injectable()
 export class LicenceService {
   private readonly key = dataKey();
+  private readonly log = new Logger(LicenceService.name);
+  private warnedUnreadable = new Set<string>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -82,7 +87,8 @@ export class LicenceService {
 
   private async entitlementPack(companyId: string): Promise<{ mode: 'all' | 'list'; features: Set<string> }> {
     const company = await this.company(companyId);
-    return this.packFromLease(Boolean(company.licenseKeyEnc), this.readLease(company.leaseJson));
+    const lease = this.usableStoredLease(company);
+    return this.packFromLease(Boolean(company.licenseKeyEnc), lease);
   }
 
   async assertCanHire(companyId: string): Promise<void> {
@@ -168,7 +174,8 @@ export class LicenceService {
     return this.refreshIfStale(companyId);
   }
 
-  private async refreshIfStale(companyId: string): Promise<LicenceView> {
+  /** Public check-in used by Settings so the licence screen matches hire/payroll gates. */
+  async refreshIfStale(companyId: string): Promise<LicenceView> {
     const company = await this.company(companyId);
     if (!company.licenseKeyEnc) return this.toView(company, await this.seats(companyId));
     const age = company.leaseCheckedAt ? Date.now() - company.leaseCheckedAt.getTime() : Number.POSITIVE_INFINITY;
@@ -179,22 +186,14 @@ export class LicenceService {
   private async checkIn(companyId: string): Promise<LicenceView> {
     const company = await this.company(companyId);
     const seats = await this.seats(companyId);
-    const stored = this.readLease(company.leaseJson);
+    const stored = this.usableStoredLease(company);
     const plainKey = openSecret(company.licenseKeyEnc, this.key);
     // Sealed key present but undecryptable (common after Hostinger redeploy when
     // storage/data.key was regenerated). Never check in with an empty key — that
     // would overwrite a good lease with "unlicensed".
     if (company.licenseKeyEnc && !plainKey) {
-      const view = this.toView(company, seats);
-      return {
-        ...view,
-        mode: 'restrict',
-        reason: 'unlicensed',
-        message:
-          'The stored license key cannot be read after a host key change. Paste the key again under Settings → Licence. Set DATA_KEY in hosting env so the next deploy keeps secrets readable.',
-        active: false,
-        checkedAt: new Date().toISOString(),
-      };
+      this.warnUnreadable(companyId);
+      return this.unreadableView(company, seats);
     }
     let fresh: LeaseV1 | null = null;
     let transportFailed = true;
@@ -205,19 +204,27 @@ export class LicenceService {
       if (match && verifyLeaseSignature(signed.lease, signed.signature, match.publicKeyRaw)) {
         fresh = signed.lease;
         transportFailed = false;
-        const planCode = fresh.plan?.code ? String(fresh.plan.code).slice(0, 40) : undefined;
-        await this.prisma.company.update({
-          where: { id: companyId },
-          data: {
-            leaseJson: JSON.stringify(fresh),
-            leaseCheckedAt: new Date(),
-            ...(planCode ? { planCode } : {}),
-          },
-        });
       }
     } catch {
       transportFailed = true;
     }
+
+    // Never persist Control blank leases over a sealed key or a previously usable lease.
+    if (fresh && this.isPoisonBlank(fresh) && (company.licenseKeyEnc || stored?.usable)) {
+      fresh = null;
+      transportFailed = true;
+    } else if (fresh) {
+      const planCode = fresh.plan?.code ? String(fresh.plan.code).slice(0, 40) : undefined;
+      await this.prisma.company.update({
+        where: { id: companyId },
+        data: {
+          leaseJson: JSON.stringify(fresh),
+          leaseCheckedAt: new Date(),
+          ...(planCode ? { planCode } : {}),
+        },
+      });
+    }
+
     const decision = decideAccess({
       now: Math.floor(Date.now() / 1000),
       transportFailed,
@@ -245,7 +252,7 @@ export class LicenceService {
         main: unit.main === true,
         usable: unit.usable === true,
         verdict: String(unit.verdict),
-        termEndsAt: String(unit.termEndsAt),
+        termEndsAt: this.displayTerm(String(unit.termEndsAt)) || '',
         seatLimit: unit.seatLimit ?? null,
         seatsUsed: unit.seatsUsed ?? null,
       })),
@@ -253,6 +260,7 @@ export class LicenceService {
   }
 
   private message(access: 'allow' | 'restrict', reason: string, transportFailed: boolean): string {
+    if (reason === 'key_unreadable') return KEY_UNREADABLE;
     if (access === 'allow' && reason === 'offline_until') {
       return 'Altamid Control could not be reached. This company stays open until the offline window ends.';
     }
@@ -319,8 +327,13 @@ export class LicenceService {
 
   private toView(company: Company, seats: number): LicenceView {
     const hasKey = Boolean(company.licenseKeyEnc);
-    const keyHint = hasKey ? maskSecret(openSecret(company.licenseKeyEnc, this.key) || '••••') : '';
-    const lease = this.readLease(company.leaseJson);
+    const plainKey = hasKey ? openSecret(company.licenseKeyEnc, this.key) : '';
+    if (hasKey && !plainKey) {
+      this.warnUnreadable(company.id);
+      return this.unreadableView(company, seats);
+    }
+    const keyHint = hasKey ? maskSecret(plainKey) : '';
+    const lease = this.usableStoredLease(company);
     const pack = this.packFromLease(hasKey, lease);
     const base = {
       checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
@@ -383,13 +396,64 @@ export class LicenceService {
       planCode,
       planName,
       seatLimit: lease.seats?.limit ?? null,
-      termStartsAt: lease.termStartsAt || null,
-      termEndsAt: lease.termEndsAt || null,
+      termStartsAt: this.displayTerm(lease.termStartsAt),
+      termEndsAt: this.displayTerm(lease.termEndsAt),
       status: lease.status || lease.verdict,
       active: lease.usable === true,
       outlets: this.allowance(lease),
       addons: Array.isArray(lease.addons) ? lease.addons.map((item) => ({ code: String(item.code), name: String(item.name) })) : [],
     };
+  }
+
+  private unreadableView(company: Company, seats: number): LicenceView {
+    const pack = CORE_SET();
+    return {
+      mode: 'restrict',
+      reason: 'key_unreadable',
+      message: KEY_UNREADABLE,
+      checkedAt: company.leaseCheckedAt?.toISOString() ?? null,
+      product: PRODUCT_CODE,
+      packageLabel: PACKAGE_LABELS[PRODUCT_CODE] || PRODUCT_CODE,
+      planCode: company.planCode || 'essentials',
+      planName: company.planCode || 'Pending',
+      seats,
+      seatLimit: null,
+      termStartsAt: null,
+      termEndsAt: null,
+      status: 'key_unreadable',
+      hasKey: true,
+      active: false,
+      keyHint: '••••',
+      bindingHost: company.bindingHost,
+      outlets: this.allowance(null),
+      entitlementsMode: 'list',
+      features: [...pack],
+      addons: [],
+    };
+  }
+
+  /** Drop Control blank/error leases that would show as “No key” / 1970 when a sealed key still exists. */
+  private usableStoredLease(company: Company): LeaseV1 | null {
+    const lease = this.readLease(company.leaseJson);
+    if (!lease) return null;
+    if (company.licenseKeyEnc && this.isPoisonBlank(lease)) return null;
+    return lease;
+  }
+
+  private isPoisonBlank(lease: LeaseV1): boolean {
+    if (!lease.subscriptionId) return true;
+    if (lease.verdict === 'unlicensed') return true;
+    const end = Date.parse(lease.termEndsAt || '');
+    if (Number.isFinite(end) && end < Date.parse('2000-01-01T00:00:00Z') && !lease.usable) return true;
+    return false;
+  }
+
+  /** Hide epoch / pre-2000 sentinel dates from Control blank leases. */
+  private displayTerm(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms) || ms < Date.parse('2000-01-01T00:00:00Z')) return null;
+    return iso;
   }
 
   private packFromLease(hasKey: boolean, lease: LeaseV1 | null): { mode: 'all' | 'list'; features: Set<string> } {
@@ -412,6 +476,14 @@ export class LicenceService {
     } catch {
       return null;
     }
+  }
+
+  private warnUnreadable(companyId: string): void {
+    if (this.warnedUnreadable.has(companyId)) return;
+    this.warnedUnreadable.add(companyId);
+    this.log.warn(
+      `Company ${companyId} has a sealed license key that cannot be decrypted. Set a stable DATA_KEY env and re-activate the key under Settings → Licence.`,
+    );
   }
 
   private seats(companyId: string): Promise<number> {

@@ -120,7 +120,7 @@ interface Licence {
         @case ('licence') {
           @if (error) { <p class="form-error">{{ error }}</p> }
           @if (ok) { <p class="form-ok">{{ ok }}</p> }
-          @if (licence?.hasKey) {
+          @if (licence?.hasKey && licence.reason !== 'key_unreadable') {
             <section class="settings-card licence-card">
               <header class="settings-card-head">
                 <span class="settings-icon"><i class="bi bi-key"></i></span>
@@ -136,7 +136,7 @@ interface Licence {
                   <div><dt>Package</dt><dd>{{ licence!.packageLabel || licence!.product }}</dd></div>
                   <div><dt>Plan</dt><dd>{{ licence!.planName || licence!.planCode || '—' }}</dd></div>
                   <div><dt>License key</dt><dd class="mono">{{ licence!.keyHint || '••••' }}</dd></div>
-                  <div><dt>Expires</dt><dd>{{ licence!.termEndsAt ? unitEnd(licence!.termEndsAt) : '—' }}</dd></div>
+                  <div><dt>Expires</dt><dd>{{ termLabel(licence!.termEndsAt) }}</dd></div>
                   <div><dt>People</dt><dd>{{ licence!.seats }}@if (licence!.seatLimit !== null) { / {{ licence!.seatLimit }} }</dd></div>
                   @if (licence!.outlets?.allowed) {
                     <div><dt>Outlets</dt><dd>{{ licence!.outlets!.allowed }} allowed</dd></div>
@@ -156,13 +156,16 @@ interface Licence {
               <header class="settings-card-head">
                 <span class="settings-icon"><i class="bi bi-key"></i></span>
                 <div>
-                  <h2>Activate licence</h2>
+                  <h2>{{ licence?.reason === 'key_unreadable' ? 'Re-activate licence' : 'Activate licence' }}</h2>
                   <p>Paste the license key from Altamid Control. Binding to this host is automatic.</p>
                 </div>
+                @if (licence?.reason === 'key_unreadable') {
+                  <span class="chip is-bad">{{ unitVerdict('key_unreadable') }}</span>
+                }
               </header>
               <div class="settings-card-body">
                 @if (licence) {
-                  <p class="muted">{{ licence.message }}</p>
+                  <p data-inline-message [class]="licence.reason === 'key_unreadable' ? 'form-error' : 'muted'">{{ licence.message }}</p>
                 }
                 <label for="key">License key</label>
                 <input id="key" name="key" [(ngModel)]="licenseKey" placeholder="AS1.HRMS.…" autocomplete="off" required>
@@ -364,6 +367,14 @@ export class SettingsComponent implements OnInit {
     return Number.isNaN(date.getTime()) ? iso : new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
   }
 
+  /** Hide Control blank-lease epoch dates (1970 / pre-2000). */
+  termLabel(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms) || ms < Date.parse('2000-01-01T00:00:00Z')) return '—';
+    return this.unitEnd(iso);
+  }
+
   unitVerdict(verdict: string): string {
     const words: Record<string, string> = {
       expired: 'Expired',
@@ -373,6 +384,7 @@ export class SettingsComponent implements OnInit {
       not_started: 'Not started',
       seats_exceeded: 'Over seats',
       unlicensed: 'No key',
+      key_unreadable: 'Key unreadable',
       no_lease: 'Not checked in',
       setup: 'Inactive',
       active: 'Active',

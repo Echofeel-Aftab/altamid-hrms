@@ -725,7 +725,7 @@ export class HrmsController {
   @Get('licence')
   async showLicence(@Req() request: RequestWithSession) {
     await this.gates.gate(request.session, 'settings', 'You do not have access to the licence.');
-    return this.licence.view(request.session.companyId);
+    return this.licence.refreshIfStale(request.session.companyId);
   }
 
   @Post('licence/check')
