@@ -331,7 +331,7 @@ type DeskTab = 'today' | 'month' | 'team' | 'holidays' | 'devices';
           @for (group of holidayGroups; track group.key) {
             <section class="holiday-month">
               <h3>{{ group.label }}</h3>
-              <ul class="plain holiday-list">
+              <ul class="holiday-list">
                 @for (item of group.items; track item.id) {
                   <li class="holiday-row">
                     <time class="holiday-date" [attr.datetime]="item.day">

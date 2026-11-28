@@ -961,7 +961,9 @@ html.theme-dark .card > .card-head h2, html.theme-dark .card h2 { color: #fff; b
 .page-split > .card.day-panel ul.plain,
 .page-split > aside.card .steps,
 .page-split > aside > .card .att-live,
-.pay-desk-side > .card ul.plain {
+.pay-desk-side > .card ul.plain,
+.card.att-holidays .holiday-list,
+.att-holidays .holiday-list {
   max-height: none;
   overflow: visible;
   scrollbar-gutter: auto;
@@ -1341,31 +1343,35 @@ html.theme-dark .holiday-month {
   padding: 0;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
   align-items: stretch;
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
 }
-.holiday-year .plain,
-.holiday-list.plain { margin-bottom: 0; }
-.holiday-list.plain > li.holiday-row,
+.att-holidays .holiday-list,
+.card.att-holidays .holiday-list,
+.card .holiday-list {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
 .holiday-row {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: 14px;
+  column-gap: 14px;
+  row-gap: 8px;
   min-height: 72px;
-  height: 100%;
+  height: auto;
   box-sizing: border-box;
   margin: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
-}
-.holiday-list.plain > li.holiday-row > .btn,
-.holiday-list.plain > li.holiday-row > .holiday-remove {
-  margin-left: 0;
+  list-style: none;
 }
 .holiday-date {
   display: grid;
@@ -1419,6 +1425,7 @@ html.theme-dark .holiday-month {
 .holiday-remove {
   flex-shrink: 0;
   align-self: center;
+  justify-self: end;
   margin: 0;
   white-space: nowrap;
 }
@@ -2752,7 +2759,7 @@ html.theme-dark .att-live-when { color: var(--gold-400); }
       "date meta"
       ". action";
     align-items: start;
-    padding: 12px;
+    padding: 14px;
   }
   .holiday-date { grid-area: date; width: 52px; min-height: 52px; }
   .holiday-meta { grid-area: meta; }
