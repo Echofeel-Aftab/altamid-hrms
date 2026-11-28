@@ -940,7 +940,6 @@ html.theme-dark .card > .card-head h2, html.theme-dark .card h2 { color: #fff; b
 .att-preview > .att-live,
 .att-live-card > .att-live,
 .card ul.plain,
-.card > .holiday-year,
 .card > .steps,
 .card > .att-reader-grid,
 .home-box:not([data-key="calendar"]) > .dash-card > .dash-news,
@@ -1310,14 +1309,27 @@ html.theme-dark .balance-tile strong { color: #fff; }
 html.theme-dark .balance-meter { background: rgba(255, 255, 255, 0.12); }
 .balance-meter i { display: block; height: 100%; border-radius: 99px; background: var(--gold-500); }
 .holiday-year {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
   margin-top: 16px;
-  max-width: 42rem;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+}
+.holiday-month {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--navy-800) 3%, var(--card));
+}
+html.theme-dark .holiday-month {
+  background: color-mix(in srgb, var(--card) 88%, #000);
 }
 .holiday-month h3 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1328,11 +1340,11 @@ html.theme-dark .balance-meter { background: rgba(255, 255, 255, 0.12); }
 .holiday-year .plain { margin-bottom: 0; }
 .holiday-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  min-height: 64px;
-  padding: 10px 12px 10px 10px;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 10px 8px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
@@ -1340,10 +1352,10 @@ html.theme-dark .balance-meter { background: rgba(255, 255, 255, 0.12); }
 .holiday-date {
   display: grid;
   place-items: center;
-  width: 56px;
-  min-height: 56px;
-  padding: 6px 4px;
-  border-radius: 12px;
+  width: 52px;
+  min-height: 52px;
+  padding: 5px 3px;
+  border-radius: 10px;
   background: var(--navy-800);
   color: #fff;
   text-align: center;
@@ -2702,15 +2714,19 @@ html.theme-dark .att-live-when { color: var(--gold-400); }
 .att-month-split { margin-bottom: 0; }
 .att-holidays .inline-add { margin: 12px 0 16px; }
 .att-holidays .holiday-year { margin-top: 8px; }
+.att-holidays.card { overflow: visible; }
+@media (max-width: 720px) {
+  .holiday-year { grid-template-columns: 1fr; }
+}
 @media (max-width: 560px) {
   .holiday-row {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 52px minmax(0, 1fr);
     grid-template-areas:
       "date meta"
       "date action";
     align-items: start;
   }
-  .holiday-date { grid-area: date; width: 52px; min-height: 52px; }
+  .holiday-date { grid-area: date; width: 48px; min-height: 48px; }
   .holiday-meta { grid-area: meta; }
   .holiday-remove { grid-area: action; justify-self: start; margin-top: 4px; }
 }

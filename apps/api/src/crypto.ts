@@ -10,10 +10,21 @@ export function loadSecret(name: string): string {
   return readFileSync(file, 'utf8').trim();
 }
 
+/**
+ * Prefer DATA_KEY from the environment on Hostinger (and similar hosts) so a
+ * redeploy does not mint a new file under storage/ and brick sealed secrets
+ * such as the license key. Fall back to storage/data.key for local runs.
+ */
 export function dataKey(): Buffer {
-  const key = Buffer.from(loadSecret('data.key'), 'base64url');
+  const fromEnv = (process.env.DATA_KEY || '').trim();
+  const raw = fromEnv || loadSecret('data.key');
+  const key = Buffer.from(raw, 'base64url');
   if (key.length !== 32) {
-    throw new Error('The data key must be 32 bytes. Remove storage/data.key and start again only if this database is empty.');
+    throw new Error(
+      fromEnv
+        ? 'DATA_KEY must be a 32-byte value encoded as base64url.'
+        : 'The data key must be 32 bytes. Remove storage/data.key and start again only if this database is empty.',
+    );
   }
   return key;
 }

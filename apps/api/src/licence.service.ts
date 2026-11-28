@@ -180,6 +180,22 @@ export class LicenceService {
     const company = await this.company(companyId);
     const seats = await this.seats(companyId);
     const stored = this.readLease(company.leaseJson);
+    const plainKey = openSecret(company.licenseKeyEnc, this.key);
+    // Sealed key present but undecryptable (common after Hostinger redeploy when
+    // storage/data.key was regenerated). Never check in with an empty key — that
+    // would overwrite a good lease with "unlicensed".
+    if (company.licenseKeyEnc && !plainKey) {
+      const view = this.toView(company, seats);
+      return {
+        ...view,
+        mode: 'restrict',
+        reason: 'unlicensed',
+        message:
+          'The stored license key cannot be read after a host key change. Paste the key again under Settings → Licence. Set DATA_KEY in hosting env so the next deploy keeps secrets readable.',
+        active: false,
+        checkedAt: new Date().toISOString(),
+      };
+    }
     let fresh: LeaseV1 | null = null;
     let transportFailed = true;
     try {
