@@ -225,12 +225,12 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
                       <small>{{ dateLabel }}@if (weather) { · {{ weather.temp }}° {{ weather.place }} }</small>
                     </div>
                   }
-                  <a routerLink="/profile" (click)="userOpen = false"><i class="bi bi-person"></i> My profile</a>
-                  <a routerLink="/requests" (click)="userOpen = false"><i class="bi bi-inbox"></i> My requests</a>
-                  <a routerLink="/settings" [queryParams]="{ tab: 'password' }" (click)="userOpen = false"><i class="bi bi-shield-lock"></i> Password</a>
-                  <a routerLink="/settings" (click)="userOpen = false"><i class="bi bi-gear"></i> Settings</a>
-                  <a routerLink="/manual" (click)="userOpen = false"><i class="bi bi-book"></i> User manual</a>
-                  <button type="button" (click)="signOut()"><i class="bi bi-box-arrow-right"></i> Sign out</button>
+                  <a routerLink="/profile" (click)="userOpen = false"><i class="bi bi-person"></i> {{ i18n.t('My profile') }}</a>
+                  <a routerLink="/requests" (click)="userOpen = false"><i class="bi bi-inbox"></i> {{ i18n.t('My requests') }}</a>
+                  <a routerLink="/settings" [queryParams]="{ tab: 'password' }" (click)="userOpen = false"><i class="bi bi-shield-lock"></i> {{ i18n.t('Password') }}</a>
+                  <a routerLink="/settings" (click)="userOpen = false"><i class="bi bi-gear"></i> {{ i18n.t('Settings') }}</a>
+                  <a routerLink="/manual" (click)="userOpen = false"><i class="bi bi-book"></i> {{ i18n.t('User manual') }}</a>
+                  <button type="button" (click)="signOut()"><i class="bi bi-box-arrow-right"></i> {{ i18n.t('Sign out') }}</button>
                 </div>
               }
             </div>
@@ -281,7 +281,7 @@ const SIDEBAR_KEY = 'altamid_hrms_sidebar';
               @for (item of group.items; track item.path) {
                 <div class="launch-tile" [class.is-pinned]="isPinned(item)">
                   <a [routerLink]="item.path" (click)="launchOpen = false; open = false"><span class="launch-ico"><i [class]="item.icon"></i></span><span>{{ i18n.t(item.label) }}</span></a>
-                  <button type="button" class="launch-pin" [class.is-on]="isPinned(item)" (click)="togglePin(item)" [attr.aria-label]="(isPinned(item) ? 'Unpin ' : 'Pin ') + item.label" [title]="isPinned(item) ? 'Unpin' : 'Pin'"><i class="bi" [class.bi-pin-angle-fill]="isPinned(item)" [class.bi-pin-angle]="!isPinned(item)"></i></button>
+                  <button type="button" class="launch-pin" [class.is-on]="isPinned(item)" (click)="togglePin(item)" [attr.aria-label]="(isPinned(item) ? i18n.t('Unpin') + ' ' : i18n.t('Pin') + ' ') + i18n.t(item.label)" [title]="isPinned(item) ? i18n.t('Unpin') : i18n.t('Pin')"><i class="bi" [class.bi-pin-angle-fill]="isPinned(item)" [class.bi-pin-angle]="!isPinned(item)"></i></button>
                 </div>
               }
             </div>

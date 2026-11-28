@@ -2,6 +2,7 @@ import { Component, EventEmitter, inject, Input, OnDestroy, OnInit, Output } fro
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
+import { I18n } from '../core/i18n';
 import { PunchState } from '../core/models';
 
 const IST = 'Asia/Kolkata';
@@ -10,14 +11,14 @@ const IST = 'Asia/Kolkata';
   selector: 'app-punch-clock',
   imports: [FormsModule, RouterLink],
   template: `
-    <section class="clock-card" [class.is-in]="state.state === 'in'" [class.is-done]="state.state === 'out' && !!state.firstIn" aria-label="Check-in">
+    <section class="clock-card" [class.is-in]="state.state === 'in'" [class.is-done]="state.state === 'out' && !!state.firstIn" [attr.aria-label]="i18n.t('Check in')">
       <div class="clock-top">
         <div class="clock-when">
           <small>{{ dayLabel }}</small>
           <span class="clock-status"><i class="clock-dot"></i>{{ status }}</span>
         </div>
-        @if (late) { <span class="chip is-warn"><i class="bi bi-alarm"></i> Late by {{ late }}</span> }
-        @else if (state.firstIn) { <span class="chip is-ok"><i class="bi bi-check2"></i> On time</span> }
+        @if (late) { <span class="chip is-warn"><i class="bi bi-alarm"></i> {{ i18n.t('Late by') }} {{ late }}</span> }
+        @else if (state.firstIn) { <span class="chip is-ok"><i class="bi bi-check2"></i> {{ i18n.t('On time') }}</span> }
       </div>
 
       <div class="clock-body">
@@ -27,24 +28,24 @@ const IST = 'Asia/Kolkata';
         <div class="clock-action">
           <button type="button" class="clock-btn" [class.is-out]="state.next === 'out'" [disabled]="busy" (click)="punch()">
             <i [class]="busy ? 'bi bi-arrow-repeat clock-spin' : state.next === 'in' ? 'bi bi-box-arrow-in-right' : 'bi bi-box-arrow-right'"></i>
-            {{ busy ? (locating ? 'Finding you…' : 'Saving…') : state.next === 'in' ? 'Check in' : 'Check out' }}
+            {{ busy ? (locating ? i18n.t('Finding you…') : i18n.t('Saving…')) : state.next === 'in' ? i18n.t('Check in') : i18n.t('Check out') }}
           </button>
           @if (!compact) {
-            <button type="button" class="clock-note-link" (click)="noting = !noting">{{ noting ? 'Hide note' : 'Add a note' }}</button>
+            <button type="button" class="clock-note-link" (click)="noting = !noting">{{ noting ? i18n.t('Hide note') : i18n.t('Add a note') }}</button>
           }
         </div>
       </div>
 
       <div class="clock-meter" aria-hidden="true"><i [style.width.%]="share"></i></div>
       <div class="clock-meta">
-        <span><i class="bi bi-clock"></i> Shift {{ state.shiftStart }}–{{ state.shiftEnd }}</span>
-        <span [class.is-strict]="state.rule.needsLocation"><i [class]="state.rule.needsLocation ? 'bi bi-geo-alt-fill' : 'bi bi-globe2'"></i> {{ state.rule.label }}</span>
+        <span><i class="bi bi-clock"></i> {{ i18n.t('Shift') }} {{ state.shiftStart }}–{{ state.shiftEnd }}</span>
+        <span [class.is-strict]="state.rule.needsLocation"><i [class]="state.rule.needsLocation ? 'bi bi-geo-alt-fill' : 'bi bi-globe2'"></i> {{ state.rule.label === 'Anywhere' ? i18n.t('Anywhere') : state.rule.label }}</span>
         @if (state.firstIn) { <span><i class="bi bi-hourglass-split"></i> {{ remaining }}</span> }
       </div>
 
       @if (noting && !compact) {
         <div class="clock-note">
-          <label for="punch-note" class="sr">Note</label>
+          <label for="punch-note" class="sr">{{ i18n.t('Note') }}</label>
           <input id="punch-note" name="note" [(ngModel)]="note" maxlength="200" placeholder="Client visit, working from home…">
         </div>
       }
@@ -56,7 +57,7 @@ const IST = 'Asia/Kolkata';
           @for (item of state.punches; track item.id) {
             <li [class.is-out]="item.kind === 'out'">
               <span class="clock-log-dot"></span>
-              <strong>{{ item.kind === 'in' ? 'Checked in' : 'Checked out' }}</strong>
+              <strong>{{ item.kind === 'in' ? i18n.t('Checked in') : i18n.t('Checked out') }}</strong>
               <time>{{ time(item.punchedAt) }}</time>
               @if (item.zone || item.place) { <span class="source-chip"><i class="bi bi-geo-alt"></i> {{ item.zone === 'Remote' && item.place ? item.place : item.zone || item.place }}</span> }
               @if (item.note) { <small>{{ item.note }}</small> }
@@ -65,13 +66,14 @@ const IST = 'Asia/Kolkata';
         </ol>
       }
       @if (compact) {
-        <a class="clock-more" routerLink="/attendance">Timeline and requests <i class="bi bi-arrow-right"></i></a>
+        <a class="clock-more" routerLink="/attendance">{{ i18n.t('Timeline and requests') }} <i class="bi bi-arrow-right"></i></a>
       }
     </section>
   `,
 })
 export class PunchClockComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  readonly i18n = inject(I18n);
   @Input({ required: true }) state!: PunchState;
   @Input() compact = false;
   @Output() changed = new EventEmitter<PunchState>();
@@ -113,14 +115,14 @@ export class PunchClockComponent implements OnInit, OnDestroy {
 
   get remaining(): string {
     const left = this.shiftSeconds - this.seconds;
-    if (left <= 0) return 'Shift hours complete';
-    return `${Math.floor(left / 3600)}h ${String(Math.floor((left % 3600) / 60)).padStart(2, '0')}m to go`;
+    if (left <= 0) return this.i18n.t('Shift hours complete');
+    return `${Math.floor(left / 3600)}h ${String(Math.floor((left % 3600) / 60)).padStart(2, '0')}m ${this.i18n.t('to go')}`;
   }
 
   get status(): string {
-    if (this.state.state === 'in') return 'Checked in at ' + this.time(this.state.sessionStart || this.state.firstIn);
-    if (this.state.lastOut) return 'Checked out at ' + this.time(this.state.lastOut);
-    return 'Yet to check in';
+    if (this.state.state === 'in') return this.i18n.t('Checked in at') + ' ' + this.time(this.state.sessionStart || this.state.firstIn);
+    if (this.state.lastOut) return this.i18n.t('Checked out at') + ' ' + this.time(this.state.lastOut);
+    return this.i18n.t('Yet to check in');
   }
 
   get late(): string {
@@ -133,12 +135,14 @@ export class PunchClockComponent implements OnInit, OnDestroy {
   }
 
   get dayLabel(): string {
-    return new Intl.DateTimeFormat('en-IN', { timeZone: IST, weekday: 'long', day: 'numeric', month: 'short' }).format(new Date(this.now));
+    this.i18n.code();
+    return new Intl.DateTimeFormat(this.i18n.locale(), { timeZone: IST, weekday: 'long', day: 'numeric', month: 'short' }).format(new Date(this.now));
   }
 
   time(iso: string): string {
     if (!iso) return '';
-    return new Intl.DateTimeFormat('en-IN', { timeZone: IST, hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(iso));
+    this.i18n.code();
+    return new Intl.DateTimeFormat(this.i18n.locale(), { timeZone: IST, hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(iso));
   }
 
   async punch(): Promise<void> {

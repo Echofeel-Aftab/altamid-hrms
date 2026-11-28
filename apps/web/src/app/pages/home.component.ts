@@ -11,6 +11,7 @@ import { ModalComponent } from '../shared/modal.component';
 import { Toast } from '../shared/toast';
 import { Sweet } from '../shared/sweet';
 import { ApiService } from '../core/api.service';
+import { I18n } from '../core/i18n';
 import { Announcement, LeaveBalance, PunchState, when } from '../core/models';
 import { SessionStore } from '../core/session.store';
 
@@ -138,37 +139,37 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
       <section class="hb" aria-label="Today">
         <span class="hb-art" aria-hidden="true"><i></i><i></i><i></i></span>
         <div class="hb-main">
-          <p class="hb-kicker"><i [class]="'bi ' + dayIcon()"></i> {{ data.greeting }} · {{ todayLabel() }}</p>
+          <p class="hb-kicker"><i [class]="'bi ' + dayIcon()"></i> {{ i18n.t(data.greeting) }} · {{ todayLabel() }}</p>
           <h1>{{ firstName() }}<span>.</span></h1>
           <p class="hb-lead">{{ heroLead() }}</p>
           <div class="hb-stats">
             @if (canApprovals()) {
               <a routerLink="/approvals" [class.is-hot]="data.pending > 0">
                 <i class="bi bi-hourglass-split"></i>
-                <strong>{{ data.pending }}</strong><span>Waiting on you</span>
+                <strong>{{ data.pending }}</strong><span>{{ i18n.t('Waiting on you') }}</span>
               </a>
             }
             @if (data.attendance) {
               <a routerLink="/attendance">
                 <i class="bi bi-calendar-check"></i>
-                <strong>{{ tally('present') + tally('onduty') }}</strong><span>Present in {{ monthShort() }}</span>
+                <strong>{{ tally('present') + tally('onduty') }}</strong><span>{{ i18n.t('Present in') }} {{ monthShort() }}</span>
               </a>
             }
             @if (leaveLeft() !== null) {
               <a routerLink="/leave">
                 <i class="bi bi-airplane"></i>
-                <strong>{{ leaveLeft() }}</strong><span>Leave days left</span>
+                <strong>{{ leaveLeft() }}</strong><span>{{ i18n.t('Leave days left') }}</span>
               </a>
             }
             @if (data.companyToday; as co) {
               <a [routerLink]="canExceptions() ? '/exceptions' : '/people'">
                 <i class="bi bi-people"></i>
-                <strong>{{ co.present + co.away }}<em>/{{ co.headcount }}</em></strong><span>Working today</span>
+                <strong>{{ co.present + co.away }}<em>/{{ co.headcount }}</em></strong><span>{{ i18n.t('Working today') }}</span>
               </a>
             } @else if (data.teamToday) {
               <a routerLink="/team">
                 <i class="bi bi-people"></i>
-                <strong>{{ data.teamToday.in }}<em>/{{ data.teamToday.total }}</em></strong><span>My team working</span>
+                <strong>{{ data.teamToday.in }}<em>/{{ data.teamToday.total }}</em></strong><span>{{ i18n.t('My team working') }}</span>
               </a>
             }
           </div>
@@ -176,24 +177,24 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
         @if (searchOn()) {
           <div class="people-find-wrap">
             <form class="people-find" (ngSubmit)="find()">
-              <label for="who" class="sr">Find a colleague</label>
+              <label for="who" class="sr">{{ i18n.t('Find a colleague') }}</label>
               <i class="bi bi-search"></i>
-              <input id="who" name="who" [(ngModel)]="query" placeholder="Find a colleague" autocomplete="off">
-              <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Search</button>
+              <input id="who" name="who" [(ngModel)]="query" [placeholder]="i18n.t('Find a colleague')" autocomplete="off">
+              <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> {{ i18n.t('Search') }}</button>
             </form>
             @if (searched) {
               <div class="people-results">
-                @if (short) { <p class="muted">Type at least two letters.</p> }
-                @else if (!colleagues.length) { <p class="muted">No one matches that.</p> }
+                @if (short) { <p class="muted">{{ i18n.t('Type at least two letters.') }}</p> }
+                @else if (!colleagues.length) { <p class="muted">{{ i18n.t('No one matches that.') }}</p> }
                 @for (person of colleagues; track person.code) {
                   <div class="people-hit">
                     <app-photo size="md" [personId]="person.id || ''" [name]="person.name" />
                     <div>
                       <strong>{{ person.name }}</strong>
-                      <small>{{ person.designation || 'Team member' }}@if (person.department) { · {{ person.department }} }@if (person.location) { · {{ person.location }} }</small>
+                      <small>{{ person.designation || i18n.t('Team member') }}@if (person.department) { · {{ person.department }} }@if (person.location) { · {{ person.location }} }</small>
                     </div>
                     @if (canOpenPeople && person.id) {
-                      <a class="btn btn-ghost btn-sm" [routerLink]="['/people', person.id]"><i class="bi bi-box-arrow-up-right"></i> Open</a>
+                      <a class="btn btn-ghost btn-sm" [routerLink]="['/people', person.id]"><i class="bi bi-box-arrow-up-right"></i> {{ i18n.t('Open') }}</a>
                     }
                   </div>
                 }
@@ -204,40 +205,40 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
       </section>
 
       <section class="card home-links" aria-label="Everyday links">
-        <h2><i class="bi bi-grid"></i> For you</h2>
+        <h2><i class="bi bi-grid"></i> {{ i18n.t('For you') }}</h2>
         <div class="home-link-grid">
           <a class="home-link" routerLink="/recognition">
             <i class="bi bi-award"></i>
-            <span><strong>Rewards and recognition</strong><small>Thank a colleague</small></span>
+            <span><strong>{{ i18n.t('Rewards and recognition') }}</strong><small>{{ i18n.t('Thank a colleague') }}</small></span>
           </a>
           @if (shelf?.directory !== false && searchOn()) {
             <button type="button" class="home-link" (click)="focusSearch()">
               <i class="bi bi-search"></i>
-              <span><strong>Employee search</strong><small>Find a colleague</small></span>
+              <span><strong>{{ i18n.t('Employee search') }}</strong><small>{{ i18n.t('Find a colleague') }}</small></span>
             </button>
           }
           <a class="home-link" routerLink="/news">
             <i class="bi bi-newspaper"></i>
-            <span><strong>News and articles</strong><small>Announcements</small></span>
+            <span><strong>{{ i18n.t('News and articles') }}</strong><small>{{ i18n.t('Announcements') }}</small></span>
           </a>
           <button type="button" class="home-link" (click)="openFaqs()">
             <i class="bi bi-question-circle"></i>
-            <span><strong>FAQs</strong><small>{{ faqCount() }}</small></span>
+            <span><strong>{{ i18n.t('FAQs') }}</strong><small>{{ faqCount() }}</small></span>
           </button>
           @if (shelf?.handbook) {
             <button type="button" class="home-link" (click)="openHandbook()">
               <i class="bi bi-journal-bookmark"></i>
-              <span><strong>HR handbook</strong><small>Version {{ shelf?.handbook?.version }}</small></span>
+              <span><strong>{{ i18n.t('HR handbook') }}</strong><small>{{ i18n.t('Version') }} {{ shelf?.handbook?.version }}</small></span>
             </button>
           } @else if (shelf?.canEdit) {
             <a class="home-link" routerLink="/library">
               <i class="bi bi-journal-bookmark"></i>
-              <span><strong>HR handbook</strong><small>Publish the PDF in Library</small></span>
+              <span><strong>{{ i18n.t('HR handbook') }}</strong><small>{{ i18n.t('Publish the PDF in Library') }}</small></span>
             </a>
           } @else if (shelf) {
             <button type="button" class="home-link" disabled>
               <i class="bi bi-journal-bookmark"></i>
-              <span><strong>HR handbook</strong><small>Not published yet</small></span>
+              <span><strong>{{ i18n.t('HR handbook') }}</strong><small>{{ i18n.t('Not published yet') }}</small></span>
             </button>
           }
         </div>
@@ -246,9 +247,9 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
       @if (!editing) {
         <div class="home-toolbar">
           @if (layoutNote) { <span [class]="layoutFailed ? 'form-error' : 'form-ok'">{{ layoutNote }}</span> }
-          <button type="button" class="btn btn-ghost btn-sm" (click)="startEdit()"><i class="bi bi-grid-3x2-gap"></i> Edit my Home</button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="startEdit()"><i class="bi bi-grid-3x2-gap"></i> {{ i18n.t('Edit my Home') }}</button>
           @if (canEditLayouts) {
-            <a class="btn btn-ghost btn-sm" routerLink="/settings" [queryParams]="{ tab: 'home' }"><i class="bi bi-house-gear"></i> Home layouts for roles and people</a>
+            <a class="btn btn-ghost btn-sm" routerLink="/settings" [queryParams]="{ tab: 'home' }"><i class="bi bi-house-gear"></i> {{ i18n.t('Home layouts for roles and people') }}</a>
           }
         </div>
       } @else {
@@ -334,21 +335,21 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                         <div class="home-panel-top">
                           <span class="home-panel-ico"><i class="bi bi-hourglass-split"></i></span>
                           <div>
-                            <small>Waiting on you</small>
-                            <span class="home-panel-cta">Open approvals <i class="bi bi-arrow-right"></i></span>
+                            <small>{{ i18n.t('Waiting on you') }}</small>
+                            <span class="home-panel-cta">{{ i18n.t('Open approvals') }} <i class="bi bi-arrow-right"></i></span>
                           </div>
                         </div>
                         <div class="home-panel-hero">
                           <strong>{{ data.pending }}</strong>
-                          <p>{{ data.pending === 1 ? 'Request needs a decision' : data.pending ? 'Requests need a decision' : 'Nothing waiting right now' }}</p>
+                          <p>{{ data.pending === 1 ? i18n.t('Request needs a decision') : data.pending ? i18n.t('Requests need a decision') : i18n.t('Nothing waiting right now') }}</p>
                         </div>
                         <div class="home-panel-foot">
                           @if (data.peopleWatch; as watch) {
-                            <span><b>{{ watch.exitRequests }}</b> resignations</span>
-                            <span><b>{{ watch.detailChanges }}</b> detail changes</span>
+                            <span><b>{{ watch.exitRequests }}</b> {{ i18n.t('resignations') }}</span>
+                            <span><b>{{ watch.detailChanges }}</b> {{ i18n.t('detail changes') }}</span>
                           } @else {
-                            <span>Leave, attendance, and resignations</span>
-                            <span>{{ data.pending ? 'Review the inbox' : 'You are clear' }}</span>
+                            <span>{{ i18n.t('Leave, attendance, and resignations') }}</span>
+                            <span>{{ data.pending ? i18n.t('Review the inbox') : i18n.t('You are clear') }}</span>
                           }
                         </div>
                       </a>
@@ -359,13 +360,13 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                       <div class="home-panel-top">
                         <span class="home-panel-ico"><i class="bi bi-calendar-check"></i></span>
                         <div>
-                          <small>This month · {{ monthShort() }}</small>
-                          <span class="home-panel-cta">Open attendance <i class="bi bi-arrow-right"></i></span>
+                          <small>{{ i18n.t('This month') }} · {{ monthShort() }}</small>
+                          <span class="home-panel-cta">{{ i18n.t('Open attendance') }} <i class="bi bi-arrow-right"></i></span>
                         </div>
                       </div>
                       <div class="home-panel-hero">
-                        <strong>{{ tally('present') + tally('onduty') }}<em> present</em></strong>
-                        <p>{{ monthDaysLogged() }} of {{ data.days.length }} working days logged</p>
+                        <strong>{{ tally('present') + tally('onduty') }}<em> {{ i18n.t('present') }}</em></strong>
+                        <p>{{ monthDaysLogged() }} of {{ data.days.length }} {{ i18n.t('working days logged') }}</p>
                       </div>
                       <div class="home-panel-mix" role="img" [attr.aria-label]="monthMixLabel()">
                         @if (monthShare('present')) { <span class="is-present" [style.flex-grow]="monthShare('present')"></span> }
@@ -374,10 +375,10 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                         @if (monthShare('missed')) { <span class="is-missed" [style.flex-grow]="monthShare('missed')"></span> }
                       </div>
                       <div class="home-panel-foot is-grid">
-                        <span><b>{{ tally('present') + tally('onduty') }}</b> present</span>
-                        <span><b>{{ tally('leave') }}</b> leave</span>
-                        <span><b>{{ tally('absent') }}</b> absent</span>
-                        <span><b>{{ tally('missed') }}</b> missed</span>
+                        <span><b>{{ tally('present') + tally('onduty') }}</b> {{ i18n.t('present') }}</span>
+                        <span><b>{{ tally('leave') }}</b> {{ i18n.t('leave') }}</span>
+                        <span><b>{{ tally('absent') }}</b> {{ i18n.t('absent') }}</span>
+                        <span><b>{{ tally('missed') }}</b> {{ i18n.t('missed') }}</span>
                       </div>
                     </a>
                   }
@@ -403,15 +404,15 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                   @case ('company-today') {
                     @let co = data.companyToday!;
                     <section class="card dash-card">
-                      <div class="card-head"><h2><i class="bi bi-buildings"></i> Company today</h2><a routerLink="/people">People</a></div>
+                      <div class="card-head"><h2><i class="bi bi-buildings"></i> {{ i18n.t('Company today') }}</h2><a routerLink="/people">{{ i18n.t('People') }}</a></div>
                       <div class="dash-body">
                       @if (co.dayNote) { <p class="muted">{{ co.dayNote }}</p> }
                       <div class="desk-stats">
-                        <a routerLink="/people"><strong>{{ co.headcount }}</strong><span>Headcount</span></a>
-                        <a routerLink="/exceptions"><strong>{{ co.present }}</strong><span>Checked in</span></a>
-                        <a routerLink="/exceptions"><strong>{{ co.away }}</strong><span>On duty or WFH</span></a>
-                        <a routerLink="/exceptions"><strong>{{ co.leave }}</strong><span>On leave</span></a>
-                        <a routerLink="/exceptions" [class.is-warn]="co.notIn > 0"><strong>{{ co.notIn }}</strong><span>Not checked in</span></a>
+                        <a routerLink="/people"><strong>{{ co.headcount }}</strong><span>{{ i18n.t('Headcount') }}</span></a>
+                        <a routerLink="/exceptions"><strong>{{ co.present }}</strong><span>{{ i18n.t('Checked in') }}</span></a>
+                        <a routerLink="/exceptions"><strong>{{ co.away }}</strong><span>{{ i18n.t('On duty or WFH') }}</span></a>
+                        <a routerLink="/exceptions"><strong>{{ co.leave }}</strong><span>{{ i18n.t('On leave') }}</span></a>
+                        <a routerLink="/exceptions" [class.is-warn]="co.notIn > 0"><strong>{{ co.notIn }}</strong><span>{{ i18n.t('Not checked in') }}</span></a>
                       </div>
                       <small class="muted">{{ co.onboarding }} onboarding · {{ co.joiningSoon }} joining in the next 30 days</small>
                       </div>
@@ -420,7 +421,7 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
                   @case ('team-today') {
                     @let team = data.teamToday!;
                     <section class="card dash-card">
-                      <div class="card-head"><h2><i class="bi bi-people"></i> My team today</h2><a routerLink="/team">My team</a></div>
+                      <div class="card-head"><h2><i class="bi bi-people"></i> {{ i18n.t('My team today') }}</h2><a routerLink="/team">{{ i18n.t('My team') }}</a></div>
                       <div class="dash-body">
                       @if (team.dayNote) { <p class="muted">{{ team.dayNote }}</p> }
                       <div class="chip-row desk-chips">
@@ -798,6 +799,7 @@ const COLUMN_CHOICES: Array<{ value: HomeColumns; split: string; title: string; 
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly store = inject(SessionStore);
+  readonly i18n = inject(I18n);
   data: HomePayload | null = null;
   error = '';
   query = '';
@@ -935,7 +937,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   faqCount(): string {
     const count = this.shelf?.faqs.length || 0;
-    return count ? count + (count === 1 ? ' answer' : ' answers') : 'Answers for your role';
+    if (!count) return this.i18n.t('FAQs');
+    return count === 1 ? this.i18n.t('1 answer') : `${count} ${this.i18n.t('answers')}`;
   }
 
   faqList(): FaqItem[] {
@@ -1215,8 +1218,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   todayLabel(): string {
+    this.i18n.code();
     const day = this.data?.today ? new Date(this.data.today + 'T12:00:00+05:30') : new Date();
-    return new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' }).format(day);
+    return new Intl.DateTimeFormat(this.i18n.locale(), { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' }).format(day);
   }
 
   dayIcon(): string {
@@ -1241,20 +1245,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   heroLead(): string {
     const pending = this.data?.pending || 0;
     if (this.canApprovals() && pending) {
-      return `${pending} ${pending === 1 ? 'request is' : 'requests are'} waiting for your decision.`;
+      return `${pending} ${pending === 1 ? this.i18n.t('request is waiting for your decision.') : this.i18n.t('requests are waiting for your decision.')}`;
     }
     const access = this.store.me?.access || [];
     if (access.includes('pay') && this.data?.payrollDesk) {
-      return 'Open Payroll when you are ready to run the month.';
+      return this.i18n.t('Open Payroll when you are ready to run the month.');
     }
     if (access.includes('people') && this.data?.peopleWatch) {
-      return 'Directory and hiring desks are ready when you need them.';
+      return this.i18n.t('Directory and hiring desks are ready when you need them.');
     }
     const punch = this.data?.attendance;
-    if (punch && !punch.firstIn) return 'Check in when your day starts, or apply leave if you need time off.';
-    if (punch?.state === 'in') return 'You are checked in. Have a productive day.';
-    if (this.leaveLeft() !== null) return 'You are all caught up. Leave and requests are a click away.';
-    return 'You are all caught up. Have a good day.';
+    if (punch && !punch.firstIn) return this.i18n.t('Check in when your day starts, or apply leave if you need time off.');
+    if (punch?.state === 'in') return this.i18n.t('You are checked in. Have a productive day.');
+    if (this.leaveLeft() !== null) return this.i18n.t('You are all caught up. Leave and requests are a click away.');
+    return this.i18n.t('You are all caught up. Have a good day.');
   }
 
   tally(status: string): number {
@@ -1272,23 +1276,25 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   monthMixLabel(): string {
     return [
-      `${this.monthShare('present')} present`,
-      `${this.monthShare('leave')} leave`,
-      `${this.monthShare('absent')} absent`,
-      `${this.monthShare('missed')} missed`,
+      `${this.monthShare('present')} ${this.i18n.t('present')}`,
+      `${this.monthShare('leave')} ${this.i18n.t('leave')}`,
+      `${this.monthShare('absent')} ${this.i18n.t('absent')}`,
+      `${this.monthShare('missed')} ${this.i18n.t('missed')}`,
     ].join(', ');
   }
 
   monthLabel(): string {
+    this.i18n.code();
     if (!this.data?.month) return '';
     const [year, month] = this.data.month.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return new Date(Date.UTC(year, month - 1, 1)).toLocaleString(this.i18n.locale(), { month: 'long', year: 'numeric', timeZone: 'UTC' });
   }
 
   monthShort(): string {
+    this.i18n.code();
     if (!this.data?.month) return '';
     const [year, month] = this.data.month.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-IN', { month: 'short', timeZone: 'UTC' });
+    return new Date(Date.UTC(year, month - 1, 1)).toLocaleString(this.i18n.locale(), { month: 'short', timeZone: 'UTC' });
   }
 
   dayNum(day: string): string {
